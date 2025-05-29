@@ -1,3 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dblp [
+  <!ENTITY uuml "ü">
+  <!ENTITY auml "ä">
+  <!ENTITY ouml "ö">
+  <!ENTITY szlig "ß">
+  <!ENTITY Uuml "Ü">
+  <!ENTITY Auml "Ä">
+  <!ENTITY Ouml "Ö">
+]>
+<dblp>
+
 <bib>
 	<article mdate="2024-02-05" key="journals/pvldb/SchmittKAMM23">
 		<author orcid="0009-0005-7656-7526">Daniel Ulrich Schmitt</author>
@@ -60,3 +72,4 @@
 		<url>db/journals/pvldb/pvldb16.html#SchalerHS23</url>
 	</article>
 </bib>
+</dblp>
