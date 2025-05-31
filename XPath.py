@@ -6,7 +6,7 @@ from collections import defaultdict
 def connect_db():
     try:
         conn = psycopg2.connect(user='postgres',
-                                password='test123',
+                                password='Science_city',
                                 host='localhost',
                                 port='5432',
                                 database='DMR_XPath')
@@ -88,13 +88,13 @@ class Node:
             (self.s_id, self.type, self.content)
         )
         self.db_id = cur.fetchone()[0]
-        print(f"Node inserted: id={self.db_id}, type={self.type}, s_id={self.s_id}, content={self.content}")
+        #print(f"Node inserted: id={self.db_id}, type={self.type}, s_id={self.s_id}, content={self.content}")
         if parent_id is not None:
             cur.execute(
                 "INSERT INTO Edge (from_node, to_node, position) VALUES (%s, %s, %s)",
                 (parent_id, self.db_id, position)
             )
-            print(f"Edge inserted: from {parent_id} to {self.db_id} at position {position}")
+            #print(f"Edge inserted: from {parent_id} to {self.db_id} at position {position}")
         for idx, child in enumerate(self.children):
             child.insert_to_db(cur, self.db_id, idx)
 
@@ -225,6 +225,7 @@ def main():
     root_node = build_edge_model(venues)
     root_node.insert_to_db(cur)
 
+    print("Datenbank erfolgreich mit Knoten und Kanten gefüllt.")
     conn.commit()
     test_queries(cur)
 
