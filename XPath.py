@@ -34,7 +34,8 @@ def setup_schema(cur):
         CREATE TABLE Edge (
             id SERIAL PRIMARY KEY,
             from_node INTEGER REFERENCES Node(id),
-            to_node INTEGER REFERENCES Node(id)
+            to_node INTEGER REFERENCES Node(id),
+            position INTEGER
         )
     """)
     print("Tabellen Node und Edge erstellt.")
@@ -81,7 +82,7 @@ class Node:
     def add_child(self, child):
         self.children.append(child)
 
-    def insert_to_db(self, cur, parent_id=None):
+    def insert_to_db(self, cur, parent_id=None, position=0):
         cur.execute(
             "INSERT INTO Node (s_id, type, content) VALUES (%s, %s, %s) RETURNING id",
             (self.s_id, self.type, self.content)
@@ -89,10 +90,13 @@ class Node:
         self.db_id = cur.fetchone()[0]
         print(f"Node inserted: id={self.db_id}, type={self.type}, s_id={self.s_id}, content={self.content}")
         if parent_id is not None:
-            cur.execute("INSERT INTO Edge (from_node, to_node) VALUES (%s, %s)", (parent_id, self.db_id))
-            print(f"Edge inserted: from {parent_id} to {self.db_id}")
-        for child in self.children:
-            child.insert_to_db(cur, self.db_id)
+            cur.execute(
+                "INSERT INTO Edge (from_node, to_node, position) VALUES (%s, %s, %s)",
+                (parent_id, self.db_id, position)
+            )
+            print(f"Edge inserted: from {parent_id} to {self.db_id} at position {position}")
+        for idx, child in enumerate(self.children):
+            child.insert_to_db(cur, self.db_id, idx)
 
 
 def build_edge_model(venues):
@@ -150,15 +154,19 @@ def siblings(cur, node_id, direction="following"):
         query = """
             SELECT n.id, n.type, n.content FROM Edge e
             JOIN Node n ON e.to_node = n.id
-            WHERE e.from_node = %s AND n.id > %s
-            ORDER BY n.id
+            WHERE e.from_node = %s AND e.position > (
+                SELECT position FROM Edge WHERE to_node = %s
+            )
+            ORDER BY e.position
         """
     else:  # preceding
         query = """
             SELECT n.id, n.type, n.content FROM Edge e
             JOIN Node n ON e.to_node = n.id
-            WHERE e.from_node = %s AND n.id < %s
-            ORDER BY n.id DESC
+            WHERE e.from_node = %s AND e.position < (
+                SELECT position FROM Edge WHERE to_node = %s
+            )
+            ORDER BY e.position DESC
         """
     cur.execute(query, (parent_id, node_id))
     return cur.fetchall()
@@ -185,9 +193,14 @@ def test_queries(cur):
     else:
         print("Knoten mit Inhalt 'Daniel Ulrich Schmitt' nicht gefunden")
 
-    print("\nDescendants von VLDB 2023 (id=2):")
-    descendants = descendant_nodes(cur, 2)
-    print_nodes("Descendants", descendants)
+    print("\nDescendants von VLDB 2023 (s_id='vldb_2023'):")
+    cur.execute("SELECT id FROM Node WHERE s_id = 'vldb_2023'")
+    result = cur.fetchone()
+    if result:
+        descendants = descendant_nodes(cur, result[0])
+        print_nodes("Descendants", descendants)
+    else:
+        print("Knoten mit s_id 'vldb_2023' nicht gefunden")
 
     print("\nSiblings von 'SchmittKAMM23':")
     cur.execute("SELECT id FROM Node WHERE s_id = 'SchmittKAMM23'")
@@ -211,12 +224,8 @@ def main():
     venues = parse_toy_example("toy_example.txt")
     root_node = build_edge_model(venues)
     root_node.insert_to_db(cur)
-    cur.execute("SELECT id, s_id, type FROM Node WHERE s_id = 'SchmittKAMM23'")
-    rows = cur.fetchall()
-    print(f"Nodes mit s_id='SchmittKAMM23': {rows}")
 
     conn.commit()
-
     test_queries(cur)
 
     cur.close()
