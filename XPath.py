@@ -138,37 +138,54 @@ def descendant_nodes(cur, node_id):
             UNION
             SELECT e.from_node, e.to_node FROM Edge e JOIN Descendants d ON e.from_node = d.to_node
         )
-        SELECT Node.id, Node.type, Node.content FROM Node JOIN Descendants ON Node.id = Descendants.to_node;
+        SELECT DISTINCT Node.id, Node.type, Node.content FROM Node JOIN Descendants ON Node.id = Descendants.to_node;
     """, (node_id,))
     return cur.fetchall()
 
 
 def siblings(cur, node_id, direction="following"):
+    # Stelle sicher, dass node_id ein <article>-Knoten ist
+    cur.execute("SELECT type FROM Node WHERE id = %s", (node_id,))
+    row = cur.fetchone()
+    if not row or row[0] != "article":
+        return []
+
+    # Parent-Knoten abfragen
     cur.execute("SELECT from_node FROM Edge WHERE to_node = %s", (node_id,))
     parent = cur.fetchone()
     if not parent:
         return []
     parent_id = parent[0]
 
+    # Position abfragen
+    cur.execute("SELECT position FROM Edge WHERE to_node = %s", (node_id,))
+    pos_row = cur.fetchone()
+    if not pos_row:
+        return []
+    my_pos = pos_row[0]
+
     if direction == "following":
         query = """
-            SELECT n.id, n.type, n.content FROM Edge e
+            SELECT n.id, n.type, n.content
+            FROM Edge e
             JOIN Node n ON e.to_node = n.id
-            WHERE e.from_node = %s AND e.position > (
-                SELECT position FROM Edge WHERE to_node = %s
-            )
+            WHERE e.from_node = %s
+              AND e.position > %s
+              AND n.type = 'article'
             ORDER BY e.position
         """
     else:  # preceding
         query = """
-            SELECT n.id, n.type, n.content FROM Edge e
+            SELECT n.id, n.type, n.content
+            FROM Edge e
             JOIN Node n ON e.to_node = n.id
-            WHERE e.from_node = %s AND e.position < (
-                SELECT position FROM Edge WHERE to_node = %s
-            )
+            WHERE e.from_node = %s
+              AND e.position < %s
+              AND n.type = 'article'
             ORDER BY e.position DESC
         """
-    cur.execute(query, (parent_id, node_id))
+
+    cur.execute(query, (parent_id, my_pos))
     return cur.fetchall()
 
 
