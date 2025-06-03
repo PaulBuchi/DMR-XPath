@@ -44,31 +44,39 @@ def setup_schema(cur):
 def parse_toy_example(file_path):
     parser = etree.XMLParser(load_dtd=True, no_network=False, resolve_entities=True)
     tree = etree.parse(file_path, parser)
-    venues = defaultdict(lambda: defaultdict(list))
-    root = tree.getroot()  # <dblp>
+    root = tree.getroot()
 
-    bib = root.find("bib")
+    # Falls die Wurzel selbst <bib> ist, verwenden wir sie direkt
+    if root.tag == "bib":
+        bib = root
+    else:
+        bib = root.find("bib")
+
     if bib is None:
         print("Kein <bib>-Element gefunden!")
-        return venues
+        return {}
 
+    venues = defaultdict(lambda: defaultdict(list))
     for pub in bib:
         if pub.tag not in ["article", "inproceedings"]:
             continue
         year = pub.findtext("year")
         key = pub.get("key")
+
         venue = None
-        if key is not None:
+        if key:
             if key.startswith("conf/sigmod") or key.startswith("journals/pacmmod"):
                 venue = "sigmod"
             elif key.startswith("conf/vldb") or key.startswith("journals/pvldb"):
                 venue = "vldb"
             elif key.startswith("conf/icde"):
                 venue = "icde"
-        if venue:
+
+        if venue and year:
             venues[venue][year].append(pub)
 
     return venues
+
 
 
 class Node:
@@ -88,46 +96,62 @@ class Node:
             (self.s_id, self.type, self.content)
         )
         self.db_id = cur.fetchone()[0]
-        #print(f"Node inserted: id={self.db_id}, type={self.type}, s_id={self.s_id}, content={self.content}")
+        print(f"Node inserted: id={self.db_id}, type={self.type}, s_id={self.s_id}, content={self.content}")
         if parent_id is not None:
             cur.execute(
                 "INSERT INTO Edge (from_node, to_node, position) VALUES (%s, %s, %s)",
                 (parent_id, self.db_id, position)
             )
-            #print(f"Edge inserted: from {parent_id} to {self.db_id} at position {position}")
+            print(f"Edge inserted: from {parent_id} to {self.db_id} at position {position}")
         for idx, child in enumerate(self.children):
             child.insert_to_db(cur, self.db_id, idx)
 
 
 def build_edge_model(venues):
-    root_node = Node("bib")
+    root_node = Node("bib")  # Wurzelknoten
+
     for venue, years in venues.items():
-        venue_node = Node("venue", venue)
+        # Venue-Knoten: type="venue", content=None, s_id=venue
+        venue_node = Node(type_="venue", content=None, s_id=venue)
+
         for year, pubs in years.items():
-            year_node = Node("year", year, s_id=f"{venue}_{year}")
+            # Year-Knoten: type="year", content=None, s_id="sigmod_2023" etc.
+            year_node = Node(type_="year", content=None, s_id=f"{venue}_{year}")
+
             for pub in pubs:
+                # Ermittlung des Kurzschlüssels (short_key) aus dem "key"-Attribut
                 full_key = pub.get("key")
                 short_key = full_key.split("/")[-1] if full_key else None
-                pub_node = Node(pub.tag, s_id=short_key)
+
+                # Publication-Knoten: type="article" oder "inproceedings", content=None, s_id=short_key
+                pub_node = Node(type_=pub.tag, content=None, s_id=short_key)
+
+                # Alle Kindelemente (z.B. author, title, pages, year, volume, journal, number, ee, url)
                 for child in pub:
                     if child.tag in ["mdate", "orcid"]:
                         continue
-                    pub_node.add_child(Node(child.tag, child.text))
+                    # content=child.text, type=child.tag, s_id bleibt None
+                    pub_node.add_child(Node(type_=child.tag, content=child.text))
+
                 year_node.add_child(pub_node)
+
             venue_node.add_child(year_node)
+
         root_node.add_child(venue_node)
+
     return root_node
 
 
-def ancestor_nodes(cur, node_id):
-    cur.execute("""
-        WITH RECURSIVE Ancestors(from_node, to_node) AS (
-            SELECT from_node, to_node FROM Edge WHERE to_node = %s
+def ancestor_nodes(cur, node_content):
+    cur.execute(
+        """WITH RECURSIVE ancestors(id) AS (
+            SELECT e.from_node FROM Node n JOIN Edge e ON n.id = e.to_node
+            WHERE n.type = 'author' AND n.content = %s
             UNION
-            SELECT e.from_node, e.to_node FROM Edge e JOIN Ancestors a ON e.to_node = a.from_node
-        )
-        SELECT Node.id, Node.type, Node.content FROM Node JOIN Ancestors ON Node.id = Ancestors.from_node;
-    """, (node_id,))
+            SELECT e.from_node FROM ancestors a JOIN Edge e ON a.id = e.to_node
+            ) SELECT n.* FROM Node n WHERE n.id IN (SELECT id FROM ancestors);""",
+        (node_content, )
+    )
     return cur.fetchall()
 
 
@@ -144,44 +168,44 @@ def descendant_nodes(cur, node_id):
 
 
 def siblings(cur, node_id, direction="following"):
-    # Stelle sicher, dass node_id ein <article>-Knoten ist
+    # Zuerst ermitteln wir den übergeordneten Knoten (parent) und die Position im Elternknoten
     cur.execute("SELECT type FROM Node WHERE id = %s", (node_id,))
     row = cur.fetchone()
-    if not row or row[0] != "article":
+    if not row:
         return []
+    # (Hier könnte man optional prüfen, ob es sich um einen Publikationsknoten handelt)
 
-    # Parent-Knoten abfragen
+    # Parent-Knoten
     cur.execute("SELECT from_node FROM Edge WHERE to_node = %s", (node_id,))
-    parent = cur.fetchone()
-    if not parent:
+    parent_row = cur.fetchone()
+    if not parent_row:
         return []
-    parent_id = parent[0]
+    parent_id = parent_row[0]
 
-    # Position abfragen
+    # Eigene Position im Elternknoten
     cur.execute("SELECT position FROM Edge WHERE to_node = %s", (node_id,))
     pos_row = cur.fetchone()
     if not pos_row:
         return []
     my_pos = pos_row[0]
 
+    # Je nach Richtung Abfrage anpassen – ohne Typfilterung
     if direction == "following":
         query = """
-            SELECT n.id, n.type, n.content
+            SELECT n.id, n.s_id, n.type, n.content, e.position
             FROM Edge e
             JOIN Node n ON e.to_node = n.id
             WHERE e.from_node = %s
               AND e.position > %s
-              AND n.type = 'article'
-            ORDER BY e.position
+            ORDER BY e.position ASC
         """
-    else:  # preceding
+    else:  # "preceding"
         query = """
-            SELECT n.id, n.type, n.content
+            SELECT n.id, n.s_id, n.type, n.content, e.position
             FROM Edge e
             JOIN Node n ON e.to_node = n.id
             WHERE e.from_node = %s
               AND e.position < %s
-              AND n.type = 'article'
             ORDER BY e.position DESC
         """
 
@@ -189,23 +213,41 @@ def siblings(cur, node_id, direction="following"):
     return cur.fetchall()
 
 
+
 def print_nodes(label, nodes):
     print(f"{label}:")
     if not nodes:
         print("  Keine Knoten gefunden.")
         return
+
+    # Wir erwarten in nodes-Tupeln jetzt z.B.: (id, s_id, type, content, [position])
     for node in nodes:
-        print(f"  id={node[0]}, type={node[1]}, content={node[2]}")
+        if len(node) == 3:
+            nid, ntype, ncontent = node
+            print(node)
+            # print(f"  id={nid}, type={ntype}, content={ncontent}")
+        elif len(node) == 4:
+            nid, nsid, ntype, ncontent = node
+            print(node)
+            #print(f"  id={nid}, s_id={nsid}, type={ntype}, content={ncontent}")
+        elif len(node) == 5:
+            nid, nsid, ntype, ncontent, pos = node
+            print(node)
+            #print(f"  id={nid}, s_id={nsid}, type={ntype}, content={ncontent}, position={pos}")
+        else:
+            # Fallback für unerwartete Tupelformate
+            print(f"  {node}")
+
 
 
 def test_queries(cur):
     print("\nTeste XPath-Funktionen:\n")
 
     print("Ancestors von 'Daniel Ulrich Schmitt':")
-    cur.execute("SELECT id FROM Node WHERE content = 'Daniel Ulrich Schmitt'")
-    result = cur.fetchone()
+    #cur.execute("SELECT id FROM Node WHERE content = 'Daniel Ulrich Schmitt'")
+    result = 'Daniel Ulrich Schmitt' #cur.fetchone()
     if result:
-        nodes = ancestor_nodes(cur, result[0])
+        nodes = ancestor_nodes(cur, result)
         print_nodes("Ancestors", nodes)
     else:
         print("Knoten mit Inhalt 'Daniel Ulrich Schmitt' nicht gefunden")

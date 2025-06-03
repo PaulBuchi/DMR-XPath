@@ -178,26 +178,20 @@ def build_edge_model(
 
 def ancestor_nodes(
     cur: psycopg2.extensions.cursor,
-    node_id: int
+    node_content: any
 ) -> List[Tuple[int, str, Optional[str]]]:
     """
     Berechnet alle ancestor-Knoten eines gegebenen Knotens in der DB.
     Gibt eine Liste von Tupeln (id, type, content) zurück.
     """
     cur.execute(
-        """
-        WITH RECURSIVE Ancestors(from_node, to_node) AS (
-            SELECT from_node, to_node FROM Edge WHERE to_node = %s
+        """WITH RECURSIVE ancestors(id) AS (
+            SELECT e.from_node FROM Node n JOIN Edge e ON n.id = e.to_node
+            WHERE n.type = 'author' AND n.content = %s
             UNION
-            SELECT e.from_node, e.to_node
-            FROM Edge e
-            JOIN Ancestors a ON e.to_node = a.from_node
-        )
-        SELECT DISTINCT Node.id, Node.type, Node.content
-        FROM Node
-        JOIN Ancestors ON Node.id = Ancestors.from_node;
-        """,
-        (node_id,)
+            SELECT e.from_node FROM ancestors a JOIN Edge e ON a.id = e.to_node
+            ) SELECT n.* FROM Node n WHERE n.id IN (SELECT id FROM ancestors);""",
+        (node_content, )
     )
     return cur.fetchall()
 
@@ -301,9 +295,8 @@ def print_nodes(
         print("  Keine Knoten gefunden.")
         return
 
-    for _id, _type, _content in nodes:
-        print(f"  id={_id}, type={_type}, content={_content}")
-
+    for node in nodes:
+        print(node)
 
 def test_queries(cur: psycopg2.extensions.cursor) -> None:
     """
@@ -314,12 +307,9 @@ def test_queries(cur: psycopg2.extensions.cursor) -> None:
 
     # Ancestors von "Daniel Ulrich Schmitt"
     print("Ancestors von 'Daniel Ulrich Schmitt':")
-    cur.execute(
-        "SELECT id FROM Node WHERE content = 'Daniel Ulrich Schmitt';"
-    )
-    result = cur.fetchone()
+    result = 'Daniel Ulrich Schmitt'
     if result:
-        nodes = ancestor_nodes(cur, result[0])
+        nodes = ancestor_nodes(cur, result)
         print_nodes("Ancestors", nodes)
     else:
         print("Knoten mit Inhalt 'Daniel Ulrich Schmitt' nicht gefunden")
