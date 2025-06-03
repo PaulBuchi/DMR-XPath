@@ -272,6 +272,16 @@ def test_queries(cur):
     else:
         print("Knoten mit s_id 'SchmittKAMM23' nicht gefunden")
 
+    print("\nSiblings von ''SchalerHS23'':")
+    sid_result = 'SchalerHS23'
+    if sid_result:
+        following = siblings(cur, sid_result[0], "following")
+        print_nodes("Following siblings", following)
+        preceding = siblings(cur, sid_result[0], "preceding")
+        print_nodes("Preceding siblings", preceding)
+    else:
+        print("Knoten mit s_id ''SchalerHS23'' nicht gefunden")
+
 
 def main():
     conn = connect_db()

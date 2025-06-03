@@ -336,6 +336,18 @@ def test_queries(cur: psycopg2.extensions.cursor) -> None:
     else:
         print("Knoten mit s_id 'SchmittKAMM23' nicht gefunden")
 
+    # Siblings von "SchalerHS23"
+    print("\nSiblings von 'SchalerHS23':")
+    cur.execute("SELECT id FROM Node WHERE s_id = 'SchalerHS23';")
+    sid_result2 = cur.fetchone()
+    if sid_result2:
+        following2 = siblings(cur, sid_result2[0], direction="following")
+        print_nodes("Following siblings", following2)
+        preceding2 = siblings(cur, sid_result2[0], direction="preceding")
+        print_nodes("Preceding siblings", preceding2)
+    else:
+        print("Knoten mit s_id 'SchalerHS23' nicht gefunden")
+
 
 def main() -> None:
     """
