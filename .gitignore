@@ -2,3 +2,4 @@ dblp.xml
 dblp.xml.gz
 xpath_paul.py
 *.idea
+__pycache__
