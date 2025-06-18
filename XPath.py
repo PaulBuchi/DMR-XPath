@@ -1606,51 +1606,15 @@ def main_phase2(force_extraction: bool = False) -> None:
     accel_count, content_count, attribute_count = get_database_statistics(cur)
     print(f"  Database import completed.")
 
-    # 7. Teste XPath Accelerator (ONLY on toy example, not large dataset)
-    print("\n6. Testing XPath accelerator on toy example...")
-
-    # Note: The large dataset is now loaded, but window function tests should only run on toy example
-    print("   Note: Window function tests require toy example data for correct validation.")
-    print("   Large dataset loaded for Phase 2, but XPath tests need toy example.")
-
-    # Create a separate test with toy example data for window functions
-    print("   Setting up separate toy example test...")
-
-    # Create a temporary connection for toy example testing
-    test_conn = connect_db()
-    if test_conn:
-        test_cur = test_conn.cursor()
-
-        # Setup accelerator schema for toy example
-        setup_schema(test_cur, use_original_schema=False)
-
-        # Parse and insert ONLY toy example data
-        toy_venues = parse_toy_example("toy_example.txt")
-        toy_root = build_edge_model(toy_venues)
-        annotate_traversal_orders(toy_root)
-        toy_root.insert_to_db(test_cur, verbose=False)
-        test_conn.commit()
-
-        print("   Testing window functions on toy example...")
-        test_queries(test_cur)
-
-        test_cur.close()
-        test_conn.close()
-
-        print("   Toy example window function testing complete.")
-    else:
-        print("   ⚠️  Could not create test connection for toy example testing.")
-
     cur.close()
     conn.close()
 
-    # Zusammenfassung
     print("\n=== Phase 2 Summary ===")
     print("Venue publication counts:")
     for venue, count in venue_counts.items():
         print(f"  {venue.upper()}: {count:,}")
 
-    print("\nNikolaus Augsten publications:")
+    print(f"\nNikolaus Augsten publications:")
     for venue, count in augsten_counts.items():
         print(f"  {venue.upper()}: {count}")
 
@@ -1663,15 +1627,281 @@ def main_phase2(force_extraction: bool = False) -> None:
     print(f"  Toy example inclusion: {'✓ PASS' if validation_success else '✗ FAIL'}")
 
     print(f"\nToy example publication positions:")
-    if toy_positions:
-        for pub_key, position in toy_positions.items():
-            print(f"  {pub_key}: {position}")
-    else:
-        print("  No toy example publications found")
+    for pub, pos in toy_positions.items():
+        print(f"  {pub}: {pos}")
 
     print(f"\nFile metrics:")
     print(f"  Size: {file_size_kb:.1f} KB")
     print(f"  Lines: {line_count:,}")
+
+    print(f"\n" + "="*60)
+    print("PHASE 2 COMPLETE - Large dataset processing finished!")
+    print("="*60)
+
+    # Ask user if they want to test XPath accelerators
+    print(f"\nXPath Accelerator Testing:")
+    print(f"  The large dataset ({accel_count:,} nodes) is now loaded.")
+    print(f"  XPath window function tests should be run on toy example data for validation.")
+    print(f"  Would you like to run XPath accelerator tests now? (y/n): ", end="")
+
+    try:
+        user_input = input().strip().lower()
+        if user_input in ['y', 'yes']:
+            test_xpath_accelerators_separately()
+        else:
+            print(f"  Skipping XPath accelerator tests.")
+            print(f"  You can run them later with: python -c \"from xPath import test_xpath_accelerators_separately; test_xpath_accelerators_separately()\"")
+    except (KeyboardInterrupt, EOFError):
+        print(f"\n  Skipping XPath accelerator tests.")
+
+
+def collect_xpath_results_for_summary(cur: psycopg2.extensions.cursor) -> dict:
+    """
+    Collects XPath axis results for summary display.
+    Returns dictionary with all axis results.
+    """
+    results = {}
+
+    try:
+        # Get key node IDs
+        cur.execute("SELECT id FROM accel WHERE s_id = 'SchmittKAMM23';")
+        schmitt_result = cur.fetchone()
+        cur.execute("SELECT id FROM accel WHERE s_id = 'SchalerHS23';")
+        schaler_result = cur.fetchone()
+        cur.execute("SELECT a.id FROM accel a JOIN content c ON a.id = c.id WHERE c.text = 'Daniel Ulrich Schmitt';")
+        daniel_result = cur.fetchone()
+        cur.execute("SELECT id FROM accel WHERE s_id = 'vldb_2023';")
+        vldb_result = cur.fetchone()
+
+        if all([schmitt_result, schaler_result, daniel_result, vldb_result]):
+            schmitt_id = schmitt_result[0]
+            schaler_id = schaler_result[0]
+            daniel_id = daniel_result[0]
+            vldb_id = vldb_result[0]
+
+            # Ancestor test
+            ancestors = ancestor_nodes(cur, "Daniel Ulrich Schmitt")
+            results["ancestor"] = [row[0] for row in ancestors]
+
+            # Descendant test
+            descendants = descendant_nodes(cur, vldb_id)
+            results["descendants"] = [row[0] for row in descendants]
+
+            # Sibling tests
+            schmitt_following = siblings(cur, schmitt_id, direction="following")
+            results["schmitt_following"] = [row[0] for row in schmitt_following]
+
+            schmitt_preceding = siblings(cur, schmitt_id, direction="preceding")
+            results["schmitt_preceding"] = [row[0] for row in schmitt_preceding]
+
+            schaler_following = siblings(cur, schaler_id, direction="following")
+            results["schaler_following"] = [row[0] for row in schaler_following]
+
+            schaler_preceding = siblings(cur, schaler_id, direction="preceding")
+            results["schaler_preceding"] = [row[0] for row in schaler_preceding]
+
+    except Exception as e:
+        print(f"   Warning: Could not collect all XPath results: {e}")
+
+    return results
+
+
+def generate_phase2_summary_tables(cur: psycopg2.extensions.cursor) -> None:
+    """
+    Generates summary tables for both EDGE model and XPath accelerator model results.
+    Shows the same format as Phase 1 summary table.
+    """
+    print("\n" + "="*70)
+    print("PHASE 2 SUMMARY TABLES")
+    print("="*70)
+
+    # Get node mappings for Phase 2 (accel schema)
+    cur.execute("SELECT id FROM accel WHERE s_id = 'SchmittKAMM23';")
+    schmitt_id = cur.fetchone()[0]
+    cur.execute("SELECT id FROM accel WHERE s_id = 'SchalerHS23';")
+    schaler_id = cur.fetchone()[0]
+    cur.execute("SELECT a.id FROM accel a JOIN content c ON a.id = c.id WHERE c.text = 'Daniel Ulrich Schmitt';")
+    daniel_id = cur.fetchone()[0]
+    cur.execute("SELECT id FROM accel WHERE s_id = 'vldb_2023';")
+    vldb_id = cur.fetchone()[0]
+
+    print(f"\nPhase 2 Node Mappings (accel schema):")
+    print(f"  SchmittKAMM23: {schmitt_id}")
+    print(f"  SchalerHS23: {schaler_id}")
+    print(f"  Daniel Ulrich Schmitt: {daniel_id}")
+    print(f"  VLDB 2023: {vldb_id}")
+
+    # Collect results for EDGE model (recursive functions)
+    print(f"\n1. EDGE MODEL RESULTS (Recursive Functions)")
+    print("-" * 50)
+
+    # Ancestor test
+    ancestors_edge = ancestor_nodes(cur, "Daniel Ulrich Schmitt")
+    ancestor_ids_edge = [row[0] for row in ancestors_edge]
+
+    # Descendant test
+    descendants_edge = descendant_nodes(cur, vldb_id)
+    descendant_ids_edge = [row[0] for row in descendants_edge]
+
+    # Sibling tests
+    schmitt_following_edge = siblings(cur, schmitt_id, direction="following")
+    schmitt_following_ids_edge = [row[0] for row in schmitt_following_edge]
+
+    schmitt_preceding_edge = siblings(cur, schmitt_id, direction="preceding")
+    schmitt_preceding_ids_edge = [row[0] for row in schmitt_preceding_edge]
+
+    schaler_following_edge = siblings(cur, schaler_id, direction="following")
+    schaler_following_ids_edge = [row[0] for row in schaler_following_edge]
+
+    schaler_preceding_edge = siblings(cur, schaler_id, direction="preceding")
+    schaler_preceding_ids_edge = [row[0] for row in schaler_preceding_edge]
+
+    # Collect results for XPath Accelerator model (window functions)
+    print(f"\n2. XPATH ACCELERATOR MODEL RESULTS (Window Functions)")
+    print("-" * 50)
+
+    # Ancestor test
+    ancestors_xpath = xpath_ancestor_window(cur, daniel_id)
+    ancestor_ids_xpath = [row[0] for row in ancestors_xpath]
+
+    # Descendant test
+    descendants_xpath = xpath_descendant_window(cur, vldb_id)
+    descendant_ids_xpath = [row[0] for row in descendants_xpath]
+
+    # Sibling tests
+    schmitt_following_xpath = xpath_following_sibling_window(cur, schmitt_id)
+    schmitt_following_ids_xpath = [row[0] for row in schmitt_following_xpath]
+
+    schmitt_preceding_xpath = xpath_preceding_sibling_window(cur, schmitt_id)
+    schmitt_preceding_ids_xpath = [row[0] for row in schmitt_preceding_xpath]
+
+    schaler_following_xpath = xpath_following_sibling_window(cur, schaler_id)
+    schaler_following_ids_xpath = [row[0] for row in schaler_following_xpath]
+
+    schaler_preceding_xpath = xpath_preceding_sibling_window(cur, schaler_id)
+    schaler_preceding_ids_xpath = [row[0] for row in schaler_preceding_xpath]
+
+    # Generate summary tables
+    print(f"\n3. EDGE MODEL SUMMARY TABLE")
+    print("="*80)
+    print("Axis                    | Result Node IDs                                    | Size")
+    print("-" * 80)
+
+    ancestor_str_edge = ','.join(map(str, ancestor_ids_edge))
+    descendant_str_edge = ','.join(map(str, descendant_ids_edge))
+    schmitt_following_str_edge = ','.join(map(str, schmitt_following_ids_edge)) if schmitt_following_ids_edge else "-"
+    schmitt_preceding_str_edge = ','.join(map(str, schmitt_preceding_ids_edge)) if schmitt_preceding_ids_edge else "-"
+    schaler_following_str_edge = ','.join(map(str, schaler_following_ids_edge)) if schaler_following_ids_edge else "-"
+    schaler_preceding_str_edge = ','.join(map(str, schaler_preceding_ids_edge)) if schaler_preceding_ids_edge else "-"
+
+    print(f"ancestor                | {ancestor_str_edge:50} | {len(ancestor_ids_edge)}")
+    print(f"descendants             | {descendant_str_edge:50} | {len(descendant_ids_edge)}")
+    print(f"following SchmittKAMM23 | {schmitt_following_str_edge:50} | {len(schmitt_following_ids_edge)}")
+    print(f"preceding SchmittKAMM23 | {schmitt_preceding_str_edge:50} | {len(schmitt_preceding_ids_edge)}")
+    print(f"following SchalerHS23   | {schaler_following_str_edge:50} | {len(schaler_following_ids_edge)}")
+    print(f"preceding SchalerHS23   | {schaler_preceding_str_edge:50} | {len(schaler_preceding_ids_edge)}")
+
+    print(f"\n4. XPATH ACCELERATOR MODEL SUMMARY TABLE")
+    print("="*80)
+    print("Axis                    | Result Node IDs                                    | Size")
+    print("-" * 80)
+
+    ancestor_str_xpath = ','.join(map(str, ancestor_ids_xpath))
+    descendant_str_xpath = ','.join(map(str, descendant_ids_xpath))
+    schmitt_following_str_xpath = ','.join(map(str, schmitt_following_ids_xpath)) if schmitt_following_ids_xpath else "-"
+    schmitt_preceding_str_xpath = ','.join(map(str, schmitt_preceding_ids_xpath)) if schmitt_preceding_ids_xpath else "-"
+    schaler_following_str_xpath = ','.join(map(str, schaler_following_ids_xpath)) if schaler_following_ids_xpath else "-"
+    schaler_preceding_str_xpath = ','.join(map(str, schaler_preceding_ids_xpath)) if schaler_preceding_ids_xpath else "-"
+
+    print(f"ancestor                | {ancestor_str_xpath:50} | {len(ancestor_ids_xpath)}")
+    print(f"descendants             | {descendant_str_xpath:50} | {len(descendant_ids_xpath)}")
+    print(f"following SchmittKAMM23 | {schmitt_following_str_xpath:50} | {len(schmitt_following_ids_xpath)}")
+    print(f"preceding SchmittKAMM23 | {schmitt_preceding_str_xpath:50} | {len(schmitt_preceding_ids_xpath)}")
+    print(f"following SchalerHS23   | {schaler_following_str_xpath:50} | {len(schaler_following_ids_xpath)}")
+    print(f"preceding SchalerHS23   | {schaler_preceding_str_xpath:50} | {len(schaler_preceding_ids_xpath)}")
+
+    # Verification
+    print(f"\n5. VERIFICATION")
+    print("="*80)
+    print("Comparing EDGE Model vs XPath Accelerator Model results:")
+
+    comparisons = [
+        ("ancestor", len(ancestor_ids_edge), len(ancestor_ids_xpath)),
+        ("descendants", len(descendant_ids_edge), len(descendant_ids_xpath)),
+        ("following SchmittKAMM23", len(schmitt_following_ids_edge), len(schmitt_following_ids_xpath)),
+        ("preceding SchmittKAMM23", len(schmitt_preceding_ids_edge), len(schmitt_preceding_ids_xpath)),
+        ("following SchalerHS23", len(schaler_following_ids_edge), len(schaler_following_ids_xpath)),
+        ("preceding SchalerHS23", len(schaler_preceding_ids_edge), len(schaler_preceding_ids_xpath))
+    ]
+
+    all_match = True
+    for axis, edge_count, xpath_count in comparisons:
+        match = edge_count == xpath_count
+        status = "✅ MATCH" if match else "❌ DIFFER"
+        print(f"  {axis:22} | EDGE: {edge_count:3} | XPath: {xpath_count:3} | {status}")
+        if not match:
+            all_match = False
+
+    print(f"\nOverall Verification: {'✅ ALL RESULTS MATCH' if all_match else '❌ SOME RESULTS DIFFER'}")
+
+    # Expected toy example validation
+    expected_counts = [7, 28, 1, 0, 0, 1]  # ancestor, descendants, following schmitt, preceding schmitt, following schaler, preceding schaler
+    actual_counts = [len(ancestor_ids_edge), len(descendant_ids_edge), len(schmitt_following_ids_edge),
+                    len(schmitt_preceding_ids_edge), len(schaler_following_ids_edge), len(schaler_preceding_ids_edge)]
+
+    toy_validation = actual_counts == expected_counts
+    print(f"Toy Example Validation: {'✅ MATCHES EXPECTED PHASE 1 VALUES' if toy_validation else '❌ DIFFERS FROM EXPECTED VALUES'}")
+    if toy_validation:
+        print("  Expected: [7, 28, 1, 0, 0, 1] ✅")
+        print(f"  Actual:   {actual_counts} ✅")
+
+
+def test_xpath_accelerators_separately():
+    """
+    Tests XPath accelerators separately on toy example data.
+    This avoids performance issues with the large dataset.
+    """
+    print(f"\n" + "="*60)
+    print("XPATH ACCELERATOR TESTING (Toy Example)")
+    print("="*60)
+
+    # Create a separate connection for toy example testing
+    test_conn = connect_db()
+    if not test_conn:
+        print("❌ Could not connect to database for XPath testing")
+        return
+
+    test_cur = test_conn.cursor()
+
+    try:
+        print("1. Setting up toy example for XPath testing...")
+
+        # Setup accelerator schema for toy example
+        setup_schema(test_cur, use_original_schema=False)
+
+        # Parse and insert ONLY toy example data
+        toy_venues = parse_toy_example("toy_example.txt")
+        toy_root = build_edge_model(toy_venues)
+        annotate_traversal_orders(toy_root)
+        toy_root.insert_to_db(test_cur, verbose=False)
+        test_conn.commit()
+
+        print("2. Testing XPath window functions on toy example...")
+        test_queries(test_cur)
+
+        # Generate summary tables for both models
+        print("\n3. Generating summary tables...")
+        generate_phase2_summary_tables(test_cur)
+
+        print(f"\n" + "="*60)
+        print("XPATH ACCELERATOR TESTING COMPLETE")
+        print("="*60)
+
+    except Exception as e:
+        print(f"❌ XPath testing failed: {e}")
+    finally:
+        test_cur.close()
+        test_conn.close()
 
 
 def main() -> None:
