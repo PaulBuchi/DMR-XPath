@@ -5,9 +5,10 @@ XML-Parsing-Funktionen:
  - extract_venue_counts: Zählt SIGMOD/VLDB/ICDE-Tags per Regex.
 """
 
+import os
 import re
+from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
-from typing import Dict, List, Optional
 from lxml import etree
 
 # Entity-Ersetzungen für häufige Zeichen
@@ -83,121 +84,90 @@ def resolve_entities(text: str) -> str:
     return text
 
 
-def extract_venue_publications_simple(dblp_file: str, output_file: str) -> Dict[str, int]:
-    """
-    Extrahiert Publikationen von VLDB, SIGMOD und ICDE aus der DBLP-Datei.
-    Verwendet einfache Regex-basierte Textverarbeitung ohne XML-Parser.
-    """
-    print("Starting venue-specific publication extraction...")
-    print("  Using simple text processing approach...")
 
-    venue_counts = {'vldb': 0, 'sigmod': 0, 'icde': 0}
+def extract_venue_publications(
+    dblp_file: str,
+    output_file: str,
+    max_pubs: Optional[int] = None
+) -> Dict[str, int]:
+    """
+    Extrahiert alle <article> und <inproceedings> per Streaming-Parser,
+    schreibt sie pretty-printed mit Einrückung und bricht ab, sobald
+    insgesamt max_pubs Publications geschrieben wurden (wenn gesetzt).
 
-    # Regex patterns für venue classification
-    venue_patterns = {
-        'vldb': re.compile(r'key="(conf/vldb/|journals/pvldb/)'),
-        'sigmod': re.compile(r'key="(conf/sigmod/|journals/pacmmod/)'),
-        'icde': re.compile(r'key="(conf/icde/)')
+    :param dblp_file:   Pfad zur DBLP-XML-Datei
+    :param output_file: Pfad zur Ausgabedatei (XML)
+    :param max_pubs:    Optional: Maximale Anzahl zu extrahierender Publikationen
+    :return:            Dict[venue, count]
+    """
+    max_pubs = 10000
+    venue_prefixes = {
+        'vldb':   ('conf/vldb/', 'journals/pvldb/'),
+        'sigmod': ('conf/sigmod/', 'journals/pacmmod/'),
+        'icde':   ('conf/icde/',),
     }
+    venue_counts = dict.fromkeys(venue_prefixes.keys(), 0)
+    total_written = 0
 
-    # Entity-Ersetzungen für häufige Zeichen
-    entity_replacements = {
-        '&uuml;': 'ü', '&auml;': 'ä', '&ouml;': 'ö', '&szlig;': 'ß',
-        '&Uuml;': 'Ü', '&Auml;': 'Ä', '&Ouml;': 'Ö',
-        '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'",
-        '&reg;': '®', '&micro;': 'µ', '&times;': '×',
-        '&eacute;': 'é', '&iacute;': 'í', '&aacute;': 'á', '&oacute;': 'ó', '&uacute;': 'ú',
-        '&Eacute;': 'É', '&Iacute;': 'Í', '&Aacute;': 'Á', '&Oacute;': 'Ó', '&Uacute;': 'Ú',
-        '&ccedil;': 'ç', '&Ccedil;': 'Ç', '&ntilde;': 'ñ', '&Ntilde;': 'Ñ',
-        '&Aring;': 'Å', '&aring;': 'å'
-    }
+    header = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE dblp SYSTEM "dblp.dtd">\n'
+        '<bib>\n'
+    )
+    footer = '</bib>\n'
 
+    with open(output_file, 'w', encoding='utf-8') as out:
+        out.write(header)
 
-    try:
-        with open(output_file, 'w', encoding='utf-8') as out_file:
-            # Schreibe XML-Header und DTD-Referenz - match exact format
-            out_file.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-            out_file.write('<!DOCTYPE bib SYSTEM "dblp.dtd">\n')
-            out_file.write('<bib>\n')
+        context = etree.iterparse(
+            dblp_file,
+            events=('end',),
+            tag=('article', 'inproceedings'),
+            recover=True,
+            huge_tree=True
+        )
+        # Initialisiere den Parser mit dem DTD
+        for _, elem in context:
+            # Prüfe, ob das Element ein <article> oder <inproceedings> ist
+            key = (elem.get('key') or '').lower()
+            # Prüfe, ob der Key mit einem der Venue-Präfixe beginnt
+            for venue, prefixes in venue_prefixes.items():
+                # Wenn der Key mit einem der Präfixe beginnt, extrahiere das Elementund schreibe es in die Ausgabedatei
+                if any(key.startswith(p) for p in prefixes):
+                    xml_str = etree.tostring(
+                        elem,
+                        encoding='unicode',
+                        pretty_print=True
+                    )
+                    xml_str = resolve_entities(xml_str)
 
-            with open(dblp_file, 'r', encoding='utf-8') as in_file:
-                current_publication_lines = []
-                in_target_publication = False
-                current_venue = None
-                processed_lines = 0
+                    lines = xml_str.splitlines()
+                    for idx, line in enumerate(lines):
+                        # 1 Tab für Start-/End-Tag, 2 Tabs für Kindelemente
+                        indent = '\t' if idx in (0, len(lines)-1) else '\t\t'
+                        out.write(f'{indent}{line}\n')
 
-                for line in in_file:
-                    processed_lines += 1
+                    venue_counts[venue] += 1
+                    total_written += 1
+                    break  # nicht weitere Venues prüfen
 
-                    # Progress-Update
-                    if processed_lines % 1000000 == 0:
-                        print(f"    Processed {processed_lines:,} lines, extracted {sum(venue_counts.values())} publications...")
+            # Speicher freigeben, damit der Parser klein bleibt
+            elem.clear()
+            while elem.getprevious() is not None:
+                del elem.getparent()[0]
 
-                    stripped_line = line.strip()
+            # Abbruch, wenn Limit erreicht
+            if max_pubs is not None and total_written >= max_pubs:
+                print(f"Reached limit of {max_pubs} publications, stopping early.")
+                break
 
-                    # Check if this is the start of an article or inproceedings
-                    if stripped_line.startswith('<article ') or stripped_line.startswith('<inproceedings '):
-                        # Check if this publication belongs to our target venues
-                        current_venue = None
-                        for venue, pattern in venue_patterns.items():
-                            if pattern.search(stripped_line):
-                                current_venue = venue
-                                break
+        out.write(footer)
 
-                        if current_venue:
-                            in_target_publication = True
-                            current_publication_lines = [line]
-                        else:
-                            in_target_publication = False
-                            current_publication_lines = []
+    print("Extraction completed:")
+    for vn, cnt in venue_counts.items():
+        print(f"  {vn.upper():6s}: {cnt} publications")
 
-                    elif in_target_publication:
-                        current_publication_lines.append(line)
-
-                        # Check if this is the end of the publication
-                        if stripped_line.startswith('</article>') or stripped_line.startswith('</inproceedings>'):
-                            # Check if publication has meaningful content
-                            publication_text = ''.join(current_publication_lines)
-                            has_content = ('<author>' in publication_text and
-                                         '<title>' in publication_text and
-                                         '<year>' in publication_text)
-
-                            if has_content:
-                                # Write the publication to output file
-                                for pub_line in current_publication_lines:
-                                    resolved_line = resolve_entities(pub_line)
-                                    if not resolved_line.startswith('\t'):
-                                        resolved_line = '\t' + resolved_line
-                                    out_file.write(resolved_line)
-
-                                venue_counts[current_venue] += 1
-
-                                if sum(venue_counts.values()) % 1000 == 0:
-                                    print(f"    Extracted {sum(venue_counts.values())} publications...")
-
-                            # Reset for next publication
-                            in_target_publication = False
-                            current_publication_lines = []
-                            current_venue = None
-
-            out_file.write('</bib>\n')
-
-        print("Extraction completed:")
-        for venue, count in venue_counts.items():
-            print(f"  {venue.upper()}: {count} publications")
-
-        return venue_counts
-
-    except Exception as e:
-        print(f"Error during extraction: {e}")
-        return venue_counts
-
-
-def extract_venue_publications(dblp_file: str, output_file: str) -> Dict[str, int]:
-    """
-    Wrapper function that calls the simple extraction method.
-    """
-    return extract_venue_publications_simple(dblp_file, output_file)
+    return venue_counts
 
 
 def validate_toy_example_inclusion(extracted_file: str) -> bool:
