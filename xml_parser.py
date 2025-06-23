@@ -100,7 +100,7 @@ def extract_venue_publications(
     :param max_pubs:    Optional: Maximale Anzahl zu extrahierender Publikationen
     :return:            Dict[venue, count]
     """
-    max_pubs = 10000
+    #max_pubs = 10000
     venue_prefixes = {
         'vldb':   ('conf/vldb/', 'journals/pvldb/'),
         'sigmod': ('conf/sigmod/', 'journals/pacmmod/'),
