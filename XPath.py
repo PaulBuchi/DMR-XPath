@@ -1008,7 +1008,7 @@ def test_queries(cur: psycopg2.extensions.cursor) -> None:
         print("   Expected toy example dataset: ~62 nodes")
         return
     else:
-        print(f"✅ Toy example dataset detected ({node_count} nodes). Proceeding with tests.")
+        print(f" Toy example dataset detected ({node_count} nodes). Proceeding with tests.")
 
     # First, verify traversal orders for specific publications
     verify_traversal_orders(cur, ["HutterAK0L22", "SchalerHS23"])
@@ -1074,7 +1074,7 @@ def test_xpath_window_functions_toy_example(cur: psycopg2.extensions.cursor) -> 
 
             # For toy example, we expect 7 ancestors for Daniel Ulrich Schmitt
             if len(recursive_ancestors) == 7:
-                print("  ✅ Expected toy example ancestor count (7)")
+                print("   Expected toy example ancestor count (7)")
             else:
                 print(f"  ⚠️  Unexpected ancestor count (expected 7, got {len(recursive_ancestors)})")
 
@@ -1091,9 +1091,9 @@ def test_xpath_window_functions_toy_example(cur: psycopg2.extensions.cursor) -> 
         recursive_ids = {row[0] for row in recursive_descendants}
 
         if window_ids == recursive_ids:
-            print("  ✅ Results match!")
+            print("   Results match!")
         else:
-            print("  ❌ Results differ!")
+            print("   Results differ!")
 
         # Test 3: Following-sibling axis (critical test for toy example)
         print("3. Following-Sibling Axis:")
@@ -1111,9 +1111,9 @@ def test_xpath_window_functions_toy_example(cur: psycopg2.extensions.cursor) -> 
         recursive_count = len(recursive_following)
 
         if window_count == recursive_count == expected_following:
-            print("  ✅ All results match expected toy example values!")
+            print("   All results match expected toy example values!")
         else:
-            print("  ❌ Results don't match expected values!")
+            print("   Results don't match expected values!")
             if window_count != recursive_count:
                 print(f"    Window vs Recursive mismatch: {window_count} vs {recursive_count}")
             if recursive_count != expected_following:
@@ -1135,9 +1135,9 @@ def test_xpath_window_functions_toy_example(cur: psycopg2.extensions.cursor) -> 
         recursive_count = len(recursive_preceding)
 
         if window_count == recursive_count == expected_preceding:
-            print("  ✅ All results match expected toy example values!")
+            print("   All results match expected toy example values!")
         else:
-            print("  ❌ Results don't match expected values!")
+            print("   Results don't match expected values!")
             if window_count != recursive_count:
                 print(f"    Window vs Recursive mismatch: {window_count} vs {recursive_count}")
             if recursive_count != expected_preceding:
@@ -1837,12 +1837,12 @@ def generate_phase2_summary_tables(cur: psycopg2.extensions.cursor) -> None:
     all_match = True
     for axis, edge_count, xpath_count in comparisons:
         match = edge_count == xpath_count
-        status = "✅ MATCH" if match else "❌ DIFFER"
+        status = " MATCH" if match else " DIFFER"
         print(f"  {axis:22} | EDGE: {edge_count:3} | XPath: {xpath_count:3} | {status}")
         if not match:
             all_match = False
 
-    print(f"\nOverall Verification: {'✅ ALL RESULTS MATCH' if all_match else '❌ SOME RESULTS DIFFER'}")
+    print(f"\nOverall Verification: {' ALL RESULTS MATCH' if all_match else ' SOME RESULTS DIFFER'}")
 
     # Expected toy example validation
     expected_counts = [7, 28, 1, 0, 0, 1]  # ancestor, descendants, following schmitt, preceding schmitt, following schaler, preceding schaler
@@ -1850,10 +1850,10 @@ def generate_phase2_summary_tables(cur: psycopg2.extensions.cursor) -> None:
                     len(schmitt_preceding_ids_edge), len(schaler_following_ids_edge), len(schaler_preceding_ids_edge)]
 
     toy_validation = actual_counts == expected_counts
-    print(f"Toy Example Validation: {'✅ MATCHES EXPECTED PHASE 1 VALUES' if toy_validation else '❌ DIFFERS FROM EXPECTED VALUES'}")
+    print(f"Toy Example Validation: {' MATCHES EXPECTED PHASE 1 VALUES' if toy_validation else ' DIFFERS FROM EXPECTED VALUES'}")
     if toy_validation:
-        print("  Expected: [7, 28, 1, 0, 0, 1] ✅")
-        print(f"  Actual:   {actual_counts} ✅")
+        print("  Expected: [7, 28, 1, 0, 0, 1] ")
+        print(f"  Actual:   {actual_counts} ")
 
 
 def test_xpath_accelerators_separately():
@@ -1868,7 +1868,7 @@ def test_xpath_accelerators_separately():
     # Create a separate connection for toy example testing
     test_conn = connect_db()
     if not test_conn:
-        print("❌ Could not connect to database for XPath testing")
+        print(" Could not connect to database for XPath testing")
         return
 
     test_cur = test_conn.cursor()
@@ -1898,7 +1898,7 @@ def test_xpath_accelerators_separately():
         print("="*60)
 
     except Exception as e:
-        print(f"❌ XPath testing failed: {e}")
+        print(f" XPath testing failed: {e}")
     finally:
         test_cur.close()
         test_conn.close()
