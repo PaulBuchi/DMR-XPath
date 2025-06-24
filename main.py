@@ -38,7 +38,10 @@ from xml_parser import (
 
 from utils import test_xpath_accelerators_separately
 from config import TOY_XML, SMALL_BIB
-
+from single_axis_accelerator import verify_single_axis_correctness
+from performance_comparison import benchmark_descendant_queries
+from window_optimization import verify_window_optimization_equivalence
+from window_performance_analysis import analyze_window_performance
 
 
 def main_phase1() -> None:
@@ -141,8 +144,6 @@ def main_phase1() -> None:
     print("\n=== Phase 1 Complete ===")
     print("Toy example processed and XPath functions tested successfully!")
 
-
-
 def main_phase2(force_extraction: bool = False) -> None:
     """
     Hauptprogramm für Phase 2: DBLP Data Processing und XPath Accelerator.
@@ -235,7 +236,7 @@ def main_phase2(force_extraction: bool = False) -> None:
     print(f"  attribute table: {attribute_count:,} tuples")
 
     print(f"\nValidation status:")
-    print(f"  Toy example inclusion: {'✓ PASS' if validation_success else '✗ FAIL'}")
+    print(f"  Toy example inclusion: {'  PASS' if validation_success else '  FAIL'}")
 
     print(f"\nToy example publication positions:")
     for pub, pos in toy_positions.items():
@@ -267,24 +268,59 @@ def main_phase2(force_extraction: bool = False) -> None:
 
 def main_phase3() -> None:
     """
-    Phase 3: Optimierung und Benchmarking.
-    Verkleinerung der Fensteranfrage, Zugriff mit nur einer Achse, Benchmarking.
+    Phase 3: Single-Axis XPath Accelerator Implementation und Window-Optimierungen.
+    Implementiert eine optimierte Variante mit nur einer Achse (descendants) und
+    Window-Verkleinerungen für effizientere Anfragen.
     """
-    print("=== Phase 3: Optimization and Benchmarking ===")
+    print("=== Phase 3: XPath Accelerator Optimizations ===\n")
+    
+    print("1. Implementing Single-Axis XPath Accelerator...")
+    print("   (Optimized variant focusing on descendants axis only)")
+    verify_single_axis_correctness()
+    
+    print("\n2. Implementing Window Size Reduction Optimizations...")
+    print("   (Verkleinerung der Fensteranfrage für pre- und post-order Achsen)")
+    verify_window_optimization_equivalence()
+    
+    print("\n3. Running Performance Benchmark...")
+    print("   (Comparison between all implementations)")
+    benchmark_descendant_queries()
+    
+    # Interactive prompt for detailed performance analysis
+    print(f"\nDetailed Performance Analysis:")
+    print(f"  Would you like to run detailed window optimization performance analysis?")
+    print(f"  This will show comprehensive metrics for all optimization techniques.")
+    print(f"  Run detailed performance analysis? (y/n): ", end="")
 
-
+    try:
+        user_input = input().strip().lower()
+        if user_input in ['y', 'yes']:
+            print("\n4. Running Detailed Performance Analysis...")
+            analyze_window_performance()
+            
+        else:
+            print("  Skipping detailed performance analysis.")
+            print("  You can run it later with: python window_performance_analysis.py")
+    except (KeyboardInterrupt, EOFError):
+        print("\n  Skipping detailed performance analysis.")
+    
+    print("\n=== Phase 3 Complete ===")
+    print("  Single-axis accelerator implemented and verified")
+    print("  Window optimization implemented and equivalence proven")
+    print("  Performance benchmarks completed")
+    print("All XPath Accelerator optimizations successfully implemented!")
 
 def select_phase() -> int:
     """
     Allows user to select which phase to run.
-    Returns 1 for Phase 1 (toy example) or 2 for Phase 2 (DBLP processing).
+    Returns 1 for Phase 1 (toy example), 2 for Phase 2 (DBLP processing), or 3 for Phase 3 (optimizations).
     """
 
     # Check for command line argument
     if len(sys.argv) > 1:
         try:
             phase = int(sys.argv[1])
-            if phase in [1, 2]:
+            if phase in [1, 2, 3]:
                 return phase
         except ValueError:
             pass
@@ -294,7 +330,7 @@ def select_phase() -> int:
     if env_phase:
         try:
             phase = int(env_phase)
-            if phase in [1, 2]:
+            if phase in [1, 2, 3]:
                 return phase
         except ValueError:
             pass
@@ -305,12 +341,13 @@ def select_phase() -> int:
             print("XPath Accelerator - Phase Selection")
             print("1. Phase 1: Toy Example Processing")
             print("2. Phase 2: DBLP Data Processing")
-            choice = input("Select phase (1 or 2): ").strip()
+            print("3. Phase 3: Optimizations & Window Reduction")
+            choice = input("Select phase (1, 2, or 3): ").strip()
 
-            if choice in ['1', '2']:
+            if choice in ['1', '2', '3']:
                 return int(choice)
             else:
-                print("Invalid choice. Please enter 1 or 2.")
+                print("Invalid choice. Please enter 1, 2, or 3.")
         except (KeyboardInterrupt, EOFError):
             print("\nExiting...")
             sys.exit(0)
@@ -325,6 +362,9 @@ if __name__ == "__main__":
     elif phase == 2:
         print("Running Phase 2: DBLP Data Processing\n")
         main_phase2()
-    else:
-        print("Running Phase 3: Optimization and Benchmarking\n")
+    elif phase == 3:
+        print("Running Phase 3: Optimizations & Window Reduction\n")
         main_phase3()
+    else:
+        print("Invalid phase selected.")
+        sys.exit(1)
