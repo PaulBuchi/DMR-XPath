@@ -141,7 +141,7 @@ def build_edge_model(
 ) -> Node:
     """
     Baut den Baum nach dem EDGE Model auf:
-    bib → venue → year → Publikationen → Kinder (author, title, ...).
+    bib -> venue -> year -> Publikationen -> Kinder (author, title, ...).
     Gibt den Wurzelknoten 'bib' zurück.
     """
     root_node = Node("bib")

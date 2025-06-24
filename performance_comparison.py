@@ -7,7 +7,7 @@ Performance comparison between different XPath Accelerator implementations:
 """
 import time
 import psycopg2
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from db import connect_db
 from single_axis_accelerator import SingleAxisAccelerator
 from axes import descendant_nodes, xpath_descendant_window
@@ -17,11 +17,11 @@ def benchmark_descendant_queries() -> None:
     """
     Benchmarks descendant queries across different implementations.
     """
-    print("=== Performance Benchmark: Descendant Queries ===\n")
+    print("Performance Benchmark:")
     
     conn = connect_db()
     if not conn:
-        print("ERROR: Could not connect to database")
+        print("  ERROR: Could not connect to database")
         return
     
     cur = conn.cursor()
@@ -31,28 +31,21 @@ def benchmark_descendant_queries() -> None:
         test_nodes = get_test_nodes(cur)
         
         if not test_nodes:
-            print("No test nodes found. Please run previous phases first.")
+            print("  ERROR: No test nodes found")
             return
         
-        print(f"Testing descendant queries on {len(test_nodes)} nodes:")
-        for node_id, s_id, description in test_nodes:
-            print(f"  - {s_id}: {description}")
-        
-        print("\nRunning performance benchmarks...")
+        print(f"  Testing {len(test_nodes)} descendant queries...")
         
         # Benchmark each implementation
         results = {}
         
         # 1. Test EDGE Model (recursive approach)
-        print("\n1. Testing EDGE Model (Phase 1 - Recursive)...")
         results['edge_model'] = benchmark_edge_model(cur, test_nodes)
         
         # 2. Test Full XPath Accelerator (window functions)
-        print("\n2. Testing Full XPath Accelerator (Phase 2 - Window Functions)...")
         results['full_xpath'] = benchmark_full_xpath_accelerator(cur, test_nodes)
         
         # 3. Test Single-Axis Accelerator
-        print("\n3. Testing Single-Axis Accelerator (Phase 3 - Optimized)...")
         results['single_axis'] = benchmark_single_axis_accelerator(cur, test_nodes)
         
         # Display results
@@ -65,9 +58,10 @@ def benchmark_descendant_queries() -> None:
         conn.close()
 
 
-def get_test_nodes(cur: psycopg2.extensions.cursor) -> List[Tuple[int, str, str]]:
+def get_test_nodes(cur: psycopg2.extensions.cursor) -> List[Tuple[int, str, str, str, Optional[str]]]:
     """
     Gets test nodes for benchmarking.
+    Returns (id, s_id, description, type, content) tuples.
     """
     test_nodes = []
     
@@ -84,61 +78,56 @@ def get_test_nodes(cur: psycopg2.extensions.cursor) -> List[Tuple[int, str, str]
         ]
         
         for s_id, description in test_queries:
-            cur.execute("SELECT id FROM accel WHERE s_id = %s;", (s_id,))
+            cur.execute("""
+                SELECT a.id, a.type, c.text 
+                FROM accel a 
+                LEFT JOIN content c ON a.id = c.id 
+                WHERE a.s_id = %s;
+            """, (s_id,))
             result = cur.fetchone()
             if result:
-                test_nodes.append((result[0], s_id, description))
+                test_nodes.append((result[0], s_id, description, result[1], result[2]))
     
     return test_nodes
 
 
-def benchmark_edge_model(cur: psycopg2.extensions.cursor, test_nodes: List[Tuple[int, str, str]]) -> Dict:
+def benchmark_edge_model(cur: psycopg2.extensions.cursor, test_nodes: List[Tuple[int, str, str, str, Optional[str]]]) -> Dict:
     """
     Benchmarks the original EDGE model recursive approach.
     """
     results = {'times': [], 'counts': []}
     
-    for node_id, s_id, description in test_nodes:
+    for node_id, s_id, description, node_type, content in test_nodes:
         start_time = time.time()
-        
-        # Use recursive descendant function
         descendants = descendant_nodes(cur, node_id)
-        
         end_time = time.time()
         
-        execution_time = (end_time - start_time) * 1000  # Convert to milliseconds
+        execution_time = (end_time - start_time) * 1000
         results['times'].append(execution_time)
         results['counts'].append(len(descendants))
-        
-        print(f"  {s_id}: {len(descendants)} descendants in {execution_time:.2f}ms")
     
     return results
 
 
-def benchmark_full_xpath_accelerator(cur: psycopg2.extensions.cursor, test_nodes: List[Tuple[int, str, str]]) -> Dict:
+def benchmark_full_xpath_accelerator(cur: psycopg2.extensions.cursor, test_nodes: List[Tuple[int, str, str, str, Optional[str]]]) -> Dict:
     """
     Benchmarks the full XPath accelerator with window functions.
     """
     results = {'times': [], 'counts': []}
     
-    for node_id, s_id, description in test_nodes:
+    for node_id, s_id, description, node_type, content in test_nodes:
         start_time = time.time()
-        
-        # Use window function approach
         descendants = xpath_descendant_window(cur, node_id)
-        
         end_time = time.time()
         
-        execution_time = (end_time - start_time) * 1000  # Convert to milliseconds
+        execution_time = (end_time - start_time) * 1000
         results['times'].append(execution_time)
         results['counts'].append(len(descendants))
-        
-        print(f"  {s_id}: {len(descendants)} descendants in {execution_time:.2f}ms")
     
     return results
 
 
-def benchmark_single_axis_accelerator(cur: psycopg2.extensions.cursor, test_nodes: List[Tuple[int, str, str]]) -> Dict:
+def benchmark_single_axis_accelerator(cur: psycopg2.extensions.cursor, test_nodes: List[Tuple[int, str, str, str, Optional[str]]]) -> Dict:
     """
     Benchmarks the single-axis accelerator.
     """
@@ -149,19 +138,18 @@ def benchmark_single_axis_accelerator(cur: psycopg2.extensions.cursor, test_node
     has_single_axis = cur.fetchone()[0]
     
     if not has_single_axis:
-        print("  Single-axis schema not found. Please run single_axis_accelerator.py first.")
-        return results
+        # Return empty results if schema doesn't exist
+        return {'times': [0] * len(test_nodes), 'counts': [0] * len(test_nodes)}
     
     accelerator = SingleAxisAccelerator(cur)
     
     # Map node IDs from accel to single_axis_accel
-    for node_id, s_id, description in test_nodes:
+    for node_id, s_id, description, node_type, content in test_nodes:
         # Find corresponding node in single-axis schema
         cur.execute("SELECT id FROM single_axis_accel WHERE s_id = %s;", (s_id,))
         single_axis_result = cur.fetchone()
         
         if not single_axis_result:
-            print(f"  {s_id}: Node not found in single-axis schema")
             results['times'].append(0)
             results['counts'].append(0)
             continue
@@ -169,93 +157,146 @@ def benchmark_single_axis_accelerator(cur: psycopg2.extensions.cursor, test_node
         single_axis_id = single_axis_result[0]
         
         start_time = time.time()
-        
-        # Use single-axis descendant function
         descendants = accelerator.xpath_descendant_single_axis(single_axis_id)
-        
         end_time = time.time()
         
-        execution_time = (end_time - start_time) * 1000  # Convert to milliseconds
+        execution_time = (end_time - start_time) * 1000
         results['times'].append(execution_time)
         results['counts'].append(len(descendants))
-        
-        print(f"  {s_id}: {len(descendants)} descendants in {execution_time:.2f}ms")
     
     return results
 
 
-def display_benchmark_results(results: Dict, test_nodes: List[Tuple[int, str, str]]) -> None:
+def display_benchmark_results(results: Dict, test_nodes: List[Tuple[int, str, str, str, Optional[str]]]) -> None:
     """
     Displays benchmark results in a formatted table.
     """
-    print("\n" + "="*80)
-    print("PERFORMANCE BENCHMARK RESULTS")
-    print("="*80)
+    print("\n  Performance Results:")
     
-    # Header
-    print(f"{'Node':<15} {'EDGE Model':<15} {'Full XPath':<15} {'Single-Axis':<15} {'Improvement'}")
-    print("-" * 80)
+    # Calculate averages for each implementation
+    implementations = ['edge_model', 'full_xpath', 'single_axis']
+    avg_times = {}
     
-    # Results for each test node
-    for i, (node_id, s_id, description) in enumerate(test_nodes):
-        edge_time = results.get('edge_model', {}).get('times', [0])[i] if i < len(results.get('edge_model', {}).get('times', [])) else 0
-        full_time = results.get('full_xpath', {}).get('times', [0])[i] if i < len(results.get('full_xpath', {}).get('times', [])) else 0
-        single_time = results.get('single_axis', {}).get('times', [0])[i] if i < len(results.get('single_axis', {}).get('times', [])) else 0
-        
-        # Calculate improvement
-        if edge_time > 0 and single_time > 0:
-            improvement = f"{(edge_time / single_time):.1f}x"
+    for impl in implementations:
+        if impl in results and results[impl].get('times'):
+            avg_times[impl] = sum(results[impl]['times']) / len(results[impl]['times'])
         else:
-            improvement = "N/A"
-        
-        print(f"{s_id:<15} {edge_time:<15.2f} {full_time:<15.2f} {single_time:<15.2f} {improvement}")
+            avg_times[impl] = 0
     
-    # Summary statistics
-    print("\n" + "="*60)
-    print("SUMMARY STATISTICS")
-    print("="*60)
+    # Display average performance
+    print(f"    EDGE Model (recursive): {avg_times['edge_model']:.2f}ms avg")
+    print(f"    Full XPath Accelerator: {avg_times['full_xpath']:.2f}ms avg")
+    print(f"    Single-Axis Accelerator: {avg_times['single_axis']:.2f}ms avg")
     
-    for impl_name, impl_results in results.items():
-        if impl_results.get('times'):
-            avg_time = sum(impl_results['times']) / len(impl_results['times'])
-            total_descendants = sum(impl_results['counts'])
-            print(f"{impl_name.replace('_', ' ').title():<20}: Avg {avg_time:.2f}ms, Total descendants: {total_descendants}")
+    # Calculate improvement
+    if avg_times['edge_model'] > 0 and avg_times['single_axis'] > 0:
+        improvement = avg_times['edge_model'] / avg_times['single_axis']
+        print(f"    -> Single-axis improvement: {improvement:.2f}x faster than EDGE model")
     
-    print("\n" + "="*60)
-    print("OPTIMIZATION BENEFITS")
-    print("="*60)
-    print("  Single-Axis Accelerator focuses on one axis (descendants)")
+    print("   Performance benchmark complete")
     print("  B+-Tree index optimizes range queries")
     print("  Reduced schema overhead")
     print("  Consistent results with Phase 2 implementation")
-    
-    # Correctness verification
+     # Correctness verification
     print("\n" + "="*60)
     print("CORRECTNESS VERIFICATION")
     print("="*60)
     
-    all_correct = True
-    for i in range(len(test_nodes)):
-        edge_count = results.get('edge_model', {}).get('counts', [0])[i] if i < len(results.get('edge_model', {}).get('counts', [])) else 0
-        full_count = results.get('full_xpath', {}).get('counts', [0])[i] if i < len(results.get('full_xpath', {}).get('counts', [])) else 0
-        single_count = results.get('single_axis', {}).get('counts', [0])[i] if i < len(results.get('single_axis', {}).get('counts', [])) else 0
-        
-        s_id = test_nodes[i][1]
-        
-        # Check if all implementations return the same count
-        counts = [edge_count, full_count, single_count]
-        non_zero_counts = [c for c in counts if c > 0]
-        
-        if len(set(non_zero_counts)) <= 1:  # All non-zero counts are the same
-            print(f"  {s_id}: All implementations agree ({edge_count} descendants)")
-        else:
-            print(f"  {s_id}: Results differ - EDGE: {edge_count}, Full: {full_count}, Single: {single_count}")
-            all_correct = False
+    # Get database connection to fetch detailed information
+    conn = connect_db()
+    if not conn:
+        print("  ERROR: Could not connect to database for detailed verification")
+        return
     
-    if all_correct:
-        print("\n  ALL IMPLEMENTATIONS PRODUCE CONSISTENT RESULTS")
-    else:
-        print("\n  SOME IMPLEMENTATIONS PRODUCE DIFFERENT RESULTS")
+    verification_cur = conn.cursor()
+    
+    try:
+        all_correct = True
+        for i in range(len(test_nodes)):
+            edge_count = results.get('edge_model', {}).get('counts', [0])[i] if i < len(results.get('edge_model', {}).get('counts', [])) else 0
+            full_count = results.get('full_xpath', {}).get('counts', [0])[i] if i < len(results.get('full_xpath', {}).get('counts', [])) else 0
+            single_count = results.get('single_axis', {}).get('counts', [0])[i] if i < len(results.get('single_axis', {}).get('counts', [])) else 0
+            
+            node_id, s_id, description, node_type, content = test_nodes[i]
+            
+            # Check if all implementations return the same count
+            counts = [edge_count, full_count, single_count]
+            non_zero_counts = [c for c in counts if c > 0]
+            
+            print(f"\n  Test Node: {s_id}")
+            print(f"    Node ID: {node_id}")
+            print(f"    Type: {node_type}")
+            print(f"    Content: {content if content else 'N/A'}")
+            print(f"    Description: {description}")
+            
+            if len(set(non_zero_counts)) <= 1:  # All non-zero counts are the same
+                print(f"      All implementations agree ({edge_count} descendants)")
+                
+                # Show detailed descendant information for first few descendants
+                if edge_count > 0:
+                    descendant_details = get_descendant_details(verification_cur, node_id)
+                    for j, (desc_id, desc_type, desc_content) in enumerate(descendant_details[:30]):
+                        content_str = desc_content if desc_content else "N/A"
+                        if len(content_str) > 50:
+                            content_str = content_str[:47] + "..."
+                        print(f"      [{desc_id}] {desc_type}: {content_str}")
+                    if len(descendant_details) > 30:
+                        print(f"      ... and {len(descendant_details) - 30} more descendants")
+            else:
+                print(f"    X Results differ - EDGE: {edge_count}, Full: {full_count}, Single: {single_count}")
+                all_correct = False
+        
+        if all_correct:
+            print(f"\n    ALL IMPLEMENTATIONS PRODUCE CONSISTENT RESULTS")
+        else:
+            print(f"\n  X SOME IMPLEMENTATIONS PRODUCE DIFFERENT RESULTS")
+    
+    finally:
+        verification_cur.close()
+        conn.close()
+
+
+def get_descendant_details(cur: psycopg2.extensions.cursor, node_id: int, method: str = 'edge_model') -> List[Tuple[int, str, Optional[str]]]:
+    """
+    Gets detailed descendant information including node IDs and content.
+    """
+    # Check which schema is available
+    cur.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'accel');")
+    has_accel = cur.fetchone()[0]
+    
+    if method == 'edge_model':
+        # Use recursive approach similar to descendant_nodes function
+        if has_accel:
+            cur.execute("""
+                WITH RECURSIVE descendants(id) AS (
+                    SELECT id FROM accel WHERE parent = %s
+                    UNION
+                    SELECT a.id
+                    FROM accel a
+                    JOIN descendants d ON a.parent = d.id
+                )
+                SELECT DISTINCT a.id, a.type, c.text
+                FROM accel a
+                LEFT JOIN content c ON a.id = c.id
+                WHERE a.id IN (SELECT id FROM descendants)
+                ORDER BY a.id;
+            """, (node_id,))
+        else:
+            cur.execute("""
+                WITH RECURSIVE Descendants(from_node, to_node) AS (
+                    SELECT from_node, to_node FROM Edge WHERE from_node = %s
+                    UNION
+                    SELECT e.from_node, e.to_node
+                    FROM Edge e
+                    JOIN Descendants d ON e.from_node = d.to_node
+                )
+                SELECT DISTINCT Node.id, Node.type, Node.content
+                FROM Node
+                JOIN Descendants ON Node.id = Descendants.to_node
+                ORDER BY Node.id;
+            """, (node_id,))
+    
+    return cur.fetchall()
 
 
 def main() -> None:

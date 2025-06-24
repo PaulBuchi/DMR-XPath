@@ -17,6 +17,31 @@ def connect_db():
     return psycopg2.connect(**DB_PARAMS)
 
 
+def clear_db() -> None:
+    """
+    Löscht alle Tabellen, Sequences in der Datenbank.
+    """
+    conn = connect_db()
+    cur = conn.cursor()
+    # Drop all tables
+    cur.execute("DROP TABLE IF EXISTS attribute CASCADE;")
+    cur.execute("DROP TABLE IF EXISTS content CASCADE;")
+    cur.execute("DROP TABLE IF EXISTS accel CASCADE;")
+    cur.execute("DROP TABLE IF EXISTS Edge CASCADE;")
+    cur.execute("DROP TABLE IF EXISTS Node CASCADE;")
+    cur.execute("DROP TABLE IF EXISTS single_axis_accel CASCADE;")
+    cur.execute("DROP TABLE IF EXISTS single_axis_content CASCADE;")
+    cur.execute("DROP TABLE IF EXISTS optimized_accel CASCADE;")
+    #Drop all sequences
+    cur.execute("DROP SEQUENCE IF EXISTS noe_id_seq;")
+    cur.execute("DROP SEQUENCE IF EXISTS edge_id_seq;")
+    cur.execute("DROP SEQUENCE IF EXISTS optimized_accel_id_seq;")
+    cur.execute("DrOP SEQUENCE IF EXISTS single_axis_accel_id_seq;")
+    conn.commit()
+    cur.close()
+    print("Datenbank geleert: Alle Tabellen und Sequences gelöscht.")
+
+
 def setup_schema(cur: psycopg2.extensions.cursor, use_original_schema: bool = False) -> None:
     """
     Legt die Tabellen für das XPath Accelerator System an.

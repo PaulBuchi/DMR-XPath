@@ -10,7 +10,8 @@ from typing import Dict, List, Optional
 
 from db import (
     connect_db,
-    setup_schema
+    setup_schema,
+    clear_db
 )
 from xml_parser import (
     parse_toy_example
@@ -274,47 +275,39 @@ def main_phase3() -> None:
     """
     print("=== Phase 3: XPath Accelerator Optimizations ===\n")
     
-    print("1. Implementing Single-Axis XPath Accelerator...")
-    print("   (Optimized variant focusing on descendants axis only)")
+    print("1. Single-Axis XPath Accelerator (descendants only)...")
     verify_single_axis_correctness()
     
-    print("\n2. Implementing Window Size Reduction Optimizations...")
-    print("   (Verkleinerung der Fensteranfrage für pre- und post-order Achsen)")
+    print("\n2. Window Size Reduction Optimizations...")
     verify_window_optimization_equivalence()
     
-    print("\n3. Running Performance Benchmark...")
-    print("   (Comparison between all implementations)")
+    print("\n3. Performance Benchmark...")
     benchmark_descendant_queries()
     
     # Interactive prompt for detailed performance analysis
-    print(f"\nDetailed Performance Analysis:")
-    print(f"  Would you like to run detailed window optimization performance analysis?")
-    print(f"  This will show comprehensive metrics for all optimization techniques.")
-    print(f"  Run detailed performance analysis? (y/n): ", end="")
+    print(f"\nOptional: Detailed Performance Analysis")
+    print(f"  Run optimization metrics (window)? (y/n): ", end="")
 
-    try:
-        user_input = input().strip().lower()
-        if user_input in ['y', 'yes']:
-            print("\n4. Running Detailed Performance Analysis...")
-            analyze_window_performance()
-            
-        else:
-            print("  Skipping detailed performance analysis.")
-            print("  You can run it later with: python window_performance_analysis.py")
-    except (KeyboardInterrupt, EOFError):
-        print("\n  Skipping detailed performance analysis.")
-    
-    print("\n=== Phase 3 Complete ===")
-    print("  Single-axis accelerator implemented and verified")
-    print("  Window optimization implemented and equivalence proven")
-    print("  Performance benchmarks completed")
-    print("All XPath Accelerator optimizations successfully implemented!")
+    user_input = input().strip().lower()
+    if user_input in ['y', 'yes']:
+        print("\n4. Running Detailed Performance Analysis...")
+        analyze_window_performance()
+    else:
+        print("  Skipping detailed analysis.")
+
+    print("\n" + "="*60)
+    print("PHASE 3 COMPLETE - XPath Accelerator optimizations finished!")
+    print("="*60)
+
 
 def select_phase() -> int:
     """
     Allows user to select which phase to run.
     Returns 1 for Phase 1 (toy example), 2 for Phase 2 (DBLP processing), or 3 for Phase 3 (optimizations).
     """
+
+    # Cleanup the DB
+    clear_db()
 
     # Check for command line argument
     if len(sys.argv) > 1:

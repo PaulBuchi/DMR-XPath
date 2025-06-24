@@ -24,8 +24,6 @@ class OptimizedWindowAccelerator:
         """
         Erstellt ein optimiertes Schema mit zusätzlichen Indizes für Window-Optimierungen.
         """
-        print("Setting up optimized window accelerator schema...")
-        
         # Drop existing tables
         self.cur.execute("DROP TABLE IF EXISTS optimized_content CASCADE;")
         self.cur.execute("DROP TABLE IF EXISTS optimized_accel CASCADE;")
@@ -53,8 +51,6 @@ class OptimizedWindowAccelerator:
         """)
         
         # Create optimized indexes
-        print("Creating optimized indexes for window functions...")
-        
         # Primary index for descendant queries with level optimization
         self.cur.execute("""
             CREATE INDEX idx_optimized_descendants 
@@ -72,14 +68,11 @@ class OptimizedWindowAccelerator:
             CREATE INDEX idx_optimized_parent 
             ON optimized_accel (parent, pre_order);
         """)
-        
-        print("Optimized window accelerator schema created")
     
     def insert_optimized_data(self, root_node) -> None:
         """
         Fügt Daten in das optimierte Schema ein und berechnet zusätzliche Optimierungsfelder.
         """
-        print("Inserting data into optimized window accelerator...")
         self._calculate_optimization_fields(root_node, 0)
         self._insert_optimized_node_recursive(root_node, None, 0)
         
@@ -287,12 +280,12 @@ def verify_window_optimization_equivalence() -> None:
     """
     Zeigt, dass die optimierte Window-Implementation äquivalent zur Phase 2 Implementation ist.
     """
-    print("=== Window Optimization Equivalence Verification ===\n")
+    print("Window Optimization Verification:")
     
     # Establish database connection
     conn = connect_db()
     if not conn:
-        print("ERROR: Could not connect to database")
+        print("  ERROR: Could not connect to database")
         return
     
     cur = conn.cursor()
@@ -303,35 +296,27 @@ def verify_window_optimization_equivalence() -> None:
         accelerator.setup_optimized_schema()
         
         # Parse toy example and build model
-        print("1. Parsing toy example...")
         toy_venues = parse_toy_example("toy_example.txt")
-        
-        print("2. Building EDGE model...")
         root_node = build_edge_model(toy_venues)
-        
-        print("3. Annotating traversal orders...")
         annotate_traversal_orders(root_node)
         
-        print("4. Inserting into optimized accelerator...")
+        # Insert data
         accelerator.insert_optimized_data(root_node)
         conn.commit()
         
         # Set up standard accelerator for comparison
-        print("5. Setting up standard accelerator for comparison...")
         setup_schema(cur, use_original_schema=False)
         root_node.insert_to_db(cur, verbose=False)
         conn.commit()
         
         # Compare results
-        print("\n6. Comparing optimized vs standard results...")
         compare_implementations(cur, accelerator)
         
         # Show optimization benefits
-        print("\n7. Showing optimization benefits...")
         show_optimization_benefits(cur, accelerator)
         
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"  ERROR: {e}")
         conn.rollback()
     finally:
         cur.close()
@@ -342,32 +327,54 @@ def compare_implementations(cur: psycopg2.extensions.cursor, accelerator: Optimi
     """
     Vergleicht die optimierte Implementation mit der Standard-Implementation aus Phase 2.
     """
-    print("Comparing Optimized Window Functions vs Standard Phase 2 Implementation:")
-    
     # Test nodes from toy example
     test_cases = [
-        ("vldb_2023", "year", "descendant"),
-        ("SchmittKAMM23", "article", "descendant"),
-        ("HutterAK0L22", "article", "descendant"),
-        ("SchmittKAMM23", "article", "following_sibling"),
-        ("SchalerHS23", "article", "preceding_sibling")
+        ("Daniel Ulrich Schmitt", "ancestor"),
+        ("vldb_2023", "descendant"),
+        ("SchmittKAMM23", "following_sibling"),
+        ("SchmittKAMM23", "preceding_sibling"),
+        ("SchalerHS23", "following_sibling"),
+        ("SchalerHS23", "preceding_sibling")
     ]
     
-    print(f"\n{'Test Case':<20} {'Axis':<15} {'Standard':<10} {'Optimized':<10} {'Match':<10}")
-    print("-" * 70)
-    
     all_match = True
-    
-    for s_id, node_type, axis_type in test_cases:
+    tests_passed = 0
+    total_tests = 0
+
+    for s_id, axis_type in test_cases:
+        print("\n")
         # Get node ID from both schemas
+        # First try normal s_id based search
         cur.execute("SELECT id FROM accel WHERE s_id = %s;", (s_id,))
         standard_result = cur.fetchone()
         
         cur.execute("SELECT id FROM optimized_accel WHERE s_id = %s;", (s_id,))
         optimized_result = cur.fetchone()
         
+        # If s_id search returned None, try content-based search for authors
+        if (standard_result is None or optimized_result is None) and s_id == "Daniel Ulrich Schmitt":
+            # Fallback: Search by content for author nodes
+            cur.execute("""
+                SELECT a.id FROM accel a 
+                JOIN content c ON a.id = c.id 
+                WHERE a.type = 'author' AND c.text = %s;
+            """, (s_id,))
+            standard_result = cur.fetchone()
+            
+            cur.execute("""
+                SELECT a.id FROM optimized_accel a 
+                JOIN optimized_content c ON a.id = c.id 
+                WHERE a.type = 'author' AND c.text = %s;
+            """, (s_id,))
+            optimized_result = cur.fetchone()
+        
         if not standard_result or not optimized_result:
-            print(f"{s_id:<20} {axis_type:<15} {'N/A':<10} {'N/A':<10} {'SKIP':<10}")
+            if s_id == "Daniel Ulrich Schmitt":
+                print(f"  DEBUG: Author '{s_id}' not found in one or both schemas")
+                # Try to find any author nodes
+                cur.execute("SELECT a.id, c.text FROM accel a JOIN content c ON a.id = c.id WHERE a.type = 'author' LIMIT 3;")
+                authors = cur.fetchall()
+                print(f"  Available authors in accel: {authors}")
             continue
         
         standard_id = standard_result[0]
@@ -377,34 +384,43 @@ def compare_implementations(cur: psycopg2.extensions.cursor, accelerator: Optimi
         if axis_type == "descendant":
             standard_results = xpath_descendant_window(cur, standard_id)
             optimized_results = accelerator.xpath_descendant_optimized(optimized_id)
+            total_tests += 1
         elif axis_type == "ancestor":
             standard_results = xpath_ancestor_window(cur, standard_id)
             optimized_results = accelerator.xpath_ancestor_optimized(optimized_id)
+            total_tests += 1
         elif axis_type == "following_sibling":
             standard_results = xpath_sibling_window_helper(cur, standard_id, "following")
             optimized_results = accelerator.xpath_sibling_optimized(optimized_id, "following")
+            total_tests += 1
         elif axis_type == "preceding_sibling":
             standard_results = xpath_sibling_window_helper(cur, standard_id, "preceding")
             optimized_results = accelerator.xpath_sibling_optimized(optimized_id, "preceding")
+            total_tests += 1
         else:
+            print(f"  ERROR: Unknown axis type '{axis_type}' for {s_id}")
             continue
-        
+        # Print both results
+        print(f"  Testing {s_id} on {axis_type} axis:")
+        print(f"    Standard results: {len(standard_results)} nodes")
+        print(f"    Standard IDs: {[node[0] for node in standard_results]}")
+        print(f"    Optimized results: {len(optimized_results)} nodes")
+        print(f"    Optimized IDs: {[node[0] for node in optimized_results]}")
         standard_count = len(standard_results)
         optimized_count = len(optimized_results)
         match = standard_count == optimized_count
         
-        if not match:
+        if match:
+            tests_passed += 1
+        else:
             all_match = False
-        
-        match_str = " " if match else " "
-        print(f"{s_id:<20} {axis_type:<15} {standard_count:<10} {optimized_count:<10} {match_str:<10}")
     
-    print(f"\nOverall Result: {'  ALL TESTS PASS' if all_match else '  SOME TESTS FAIL'}")
+    print(f"  Equivalence Test: {tests_passed}/{total_tests} tests passed")
     
     if all_match:
-        print("  Optimized window functions are equivalent to Phase 2 implementation")
+        print("   Optimized window functions are equivalent to Phase 2")
     else:
-        print("  Optimized window functions differ from Phase 2 implementation")
+        print("  X Optimized window functions differ from Phase 2")
 
 
 def xpath_sibling_window_helper(cur: psycopg2.extensions.cursor, context_node_id: int, direction: str) -> List[Tuple[int, str, Optional[str]]]:
@@ -424,103 +440,44 @@ def show_optimization_benefits(cur: psycopg2.extensions.cursor, accelerator: Opt
     """
     Zeigt die Vorteile der Window-Optimierungen.
     """
-    print("Window Optimization Benefits:")
-    
-    # Show optimization statistics
+    # Get basic statistics
     cur.execute("SELECT COUNT(*) FROM optimized_accel;")
     total_nodes = cur.fetchone()[0]
     
-    cur.execute("SELECT AVG(subtree_size), MAX(subtree_size), MIN(subtree_size) FROM optimized_accel;")
-    avg_subtree, max_subtree, min_subtree = cur.fetchone()
+    cur.execute("SELECT AVG(subtree_size), MAX(subtree_size) FROM optimized_accel;")
+    avg_subtree, max_subtree = cur.fetchone()
     
-    cur.execute("SELECT AVG(level), MAX(level) FROM optimized_accel;")
-    avg_level, max_level = cur.fetchone()
+    cur.execute("SELECT MAX(level) FROM optimized_accel;")
+    max_level = cur.fetchone()[0]
     
-    print(f"\nDataset Statistics:")
-    print(f"  Total nodes: {total_nodes}")
-    print(f"  Average subtree size: {avg_subtree:.1f}")
-    print(f"  Maximum subtree size: {max_subtree}")
-    print(f"  Minimum subtree size: {min_subtree}")
-    print(f"  Average tree level: {avg_level:.1f}")
-    print(f"  Maximum tree level: {max_level}")
-    
-    print(f"\nOptimization Techniques:")
-    print(f"  Level-based pruning: Limits search depth in large subtrees")
-    print(f"  Subtree-size pruning: Skips empty/small subtrees")
-    print(f"  Index-guided search: Uses optimized indexes for range queries")
-    print(f"  Parent-constrained search: Limits sibling search to same parent")
-    print(f"  Position-based pruning: Uses pre_order for efficient range queries")
-    
-    # Show window size reduction examples
-    print(f"\nWindow Size Reduction Examples:")
-    
-    # Example 1: Large subtree with level constraint
-    cur.execute("SELECT id, subtree_size, level FROM optimized_accel WHERE s_id = 'vldb_2023';")
-    vldb_result = cur.fetchone()
-    
-    if vldb_result:
-        vldb_id, vldb_subtree, vldb_level = vldb_result
-        print(f"  VLDB 2023 (large subtree):")
-        print(f"    - Subtree size: {vldb_subtree} nodes")
-        print(f"    - Tree level: {vldb_level}")
-        print(f"    - Optimization: Level-constrained search (max depth: {vldb_level + 10})")
-    
-    # Example 2: Article with parent-constrained siblings
-    cur.execute("SELECT id, level FROM optimized_accel WHERE s_id = 'SchmittKAMM23';")
-    article_result = cur.fetchone()
-    
-    if article_result:
-        article_id, article_level = article_result
-        print(f"  SchmittKAMM23 (article siblings):")
-        print(f"    - Tree level: {article_level}")
-        print(f"    - Optimization: Parent-constrained + type-constrained search")
+    #print(f"  Optimization Benefits:")
+    #print(f"    - {total_nodes} nodes processed")
+    #print(f"    - Max subtree size: {max_subtree} (avg: {avg_subtree:.1f})")
+    #print(f"    - Max tree depth: {max_level}")
 
 
 def demonstrate_window_reduction() -> None:
     """
-    Demonstriert die konkreten Window-Verkleinerungen.
+    Demonstriert die Window-Verkleinerungstechniken.
     """
-    print("\n=== Window Reduction Demonstration ===")
-    
-    print("\n1. Standard Window Function (Phase 2):")
-    print("   descendant(v) = {u | pre_order(u) > pre_order(v) AND post_order(u) < post_order(v)}")
-    print("   → Searches entire subtree range")
-    
-    print("\n2. Optimized Window Function (Phase 3):")
-    print("   Optimization 1 - Subtree size pruning:")
-    print("     IF subtree_size <= 1 THEN return empty")
-    print("     → Eliminates unnecessary searches for leaf nodes")
-    
-    print("\n   Optimization 2 - Level-constrained search:")
-    print("     IF subtree_size > threshold THEN limit level <= current_level + max_depth")
-    print("     → Reduces search space in large subtrees")
-    
-    print("\n   Optimization 3 - Parent-constrained siblings:")
-    print("     sibling(v) = {u | parent(u) = parent(v) AND level(u) = level(v) AND type(u) = type(v)}")
-    print("     → Eliminates cross-parent searches")
-    
-    print("\n3. Window Size Reduction Impact:")
-    print("     Leaf nodes: 100% reduction (skipped entirely)")
-    print("     Large subtrees: ~50-80% reduction (depth-limited)")
-    print("     Sibling queries: ~90% reduction (parent-constrained)")
+    print("\n  Window Reduction Techniques:")
+    print("    1. Subtree-size pruning (skips leaf/empty nodes)")
+    print("    2. Level-constrained search (limits depth in large subtrees)")
+    print("    3. Parent-constrained siblings (eliminates cross-parent searches)")
+    print("    -> Typical reduction: 50-90% fewer nodes searched")
 
 
 def main() -> None:
     """
     Hauptfunktion für Window-Optimierungen.
     """
-    print("Starting Window Optimization Implementation and Verification\n")
-    
     # Verify equivalence with Phase 2
     verify_window_optimization_equivalence()
     
     # Demonstrate window reduction techniques
     demonstrate_window_reduction()
     
-    print("\n=== Window Optimization Complete ===")
-    print("  Optimized window functions implemented")
-    print("  Equivalence to Phase 2 verified on toy example")
-    print("  Window size reduction techniques demonstrated")
+    print("   Window optimization implementation complete")
 
 
 if __name__ == "__main__":

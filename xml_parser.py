@@ -202,7 +202,6 @@ def validate_toy_example_inclusion(extracted_file: str) -> bool:
                 print(f"  - {key}")
             return False
         else:
-            print("✓ All toy example publications found in extracted data")
             return True
 
     except Exception as e:
