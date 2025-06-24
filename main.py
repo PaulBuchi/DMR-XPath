@@ -265,6 +265,14 @@ def main_phase2(force_extraction: bool = False) -> None:
     except (KeyboardInterrupt, EOFError):
         print(f"\n  Skipping XPath accelerator tests.")
 
+def main_phase3() -> None:
+    """
+    Phase 3: Optimierung und Benchmarking.
+    Verkleinerung der Fensteranfrage, Zugriff mit nur einer Achse, Benchmarking.
+    """
+    print("=== Phase 3: Optimization and Benchmarking ===")
+
+
 
 def select_phase() -> int:
     """
@@ -314,6 +322,9 @@ if __name__ == "__main__":
     if phase == 1:
         print("Running Phase 1: Toy Example Processing\n")
         main_phase1()
-    else:
+    elif phase == 2:
         print("Running Phase 2: DBLP Data Processing\n")
         main_phase2()
+    else:
+        print("Running Phase 3: Optimization and Benchmarking\n")
+        main_phase3()
