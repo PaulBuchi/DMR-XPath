@@ -1,7 +1,7 @@
 # demonstrate_correctness.py
 """
-Demonstrates the correctness of the Single-Axis XPath Accelerator annotation
-on the same toy example as used in Phase 2.
+Demonstriert die Korrektheit der Single-Axis XPath Accelerator Annotation
+am selben Toy-Beispiel wie in Phase 2.
 """
 import psycopg2
 from db import connect_db
@@ -54,7 +54,7 @@ def demonstrate_toy_example_correctness():
 
 def show_toy_example_structure(cur: psycopg2.extensions.cursor):
     """
-    Shows the structure of the toy example data.
+    Zeigt die Struktur der Toy-Beispiel-Daten.
     """
     print("Toy Example Structure (Single-Axis Schema):")
     
@@ -123,7 +123,7 @@ def test_descendant_axis_correctness(cur: psycopg2.extensions.cursor, accelerato
         # Show first few descendants with their annotations
         print("  First 5 descendants with annotations:")
         for i, (desc_id, desc_type, desc_content) in enumerate(descendants[:5]):
-            cur.execute("SELECT pre_order, post_order FROM single_axis_accel WHERE id = %s;", (desc_id,))
+            cur.execute("SELECT pre_order, post_order FROM single_axis_accelerator WHERE id = %s;", (desc_id,))
             pre, post = cur.fetchone()
             content_display = desc_content[:30] + "..." if desc_content and len(desc_content) > 30 else desc_content
             print(f"    {i+1}. ID {desc_id}: {desc_type} (pre: {pre}, post: {post}) - {content_display}")

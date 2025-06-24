@@ -1,15 +1,14 @@
 # window_performance_analysis.py
 """
 Detaillierte Performance-Analyse der Window-Optimierungen.
-Vergleicht Standard Window Functions mit optimierten Window Functions.
+Vergleicht Standard-Window-Functions mit optimierten Window-Functions.
 """
 import time
 import psycopg2
 from typing import List, Tuple, Dict
 from db import connect_db
 from window_optimization import OptimizedWindowAccelerator
-from axes import xpath_descendant_window, xpath_ancestor_window
-
+from axes import xpath_descendant_window, xpath_ancestor_window, xpath_following_sibling_window, xpath_preceding_sibling_window
 
 def analyze_window_performance() -> None:
     """
@@ -54,7 +53,7 @@ def analyze_window_performance() -> None:
 
 def test_descendant_performance(cur: psycopg2.extensions.cursor, accelerator: OptimizedWindowAccelerator) -> None:
     """
-    Testet die Performance der descendant-Achse.
+    Testet die Performance der Descendant-Achse.
     """
     print("\n  Descendant Axis Performance:")
     
@@ -106,7 +105,7 @@ def test_descendant_performance(cur: psycopg2.extensions.cursor, accelerator: Op
 
 def test_ancestor_performance(cur: psycopg2.extensions.cursor, accelerator: OptimizedWindowAccelerator) -> None:
     """
-    Testet die Performance der ancestor-Achse.
+    Testet die Performance der Ancestor-Achse.
     """
     print("\n  Ancestor Axis Performance:")
     
@@ -158,7 +157,7 @@ def test_ancestor_performance(cur: psycopg2.extensions.cursor, accelerator: Opti
 
 def test_sibling_performance(cur: psycopg2.extensions.cursor, accelerator: OptimizedWindowAccelerator) -> None:
     """
-    Testet die Performance der sibling-Achse.
+    Testet die Performance der Sibling-Achse.
     """
     print("\n  Sibling Axis Performance:")
     
@@ -178,8 +177,7 @@ def test_sibling_performance(cur: psycopg2.extensions.cursor, accelerator: Optim
         cur.execute("SELECT id FROM optimized_accel WHERE s_id = %s;", (s_id,))
         optimized_id = cur.fetchone()[0]
         
-        # Import sibling functions
-        from axes import xpath_following_sibling_window, xpath_preceding_sibling_window
+        
         
         # Simplified benchmark
         start_time = time.time()
@@ -226,20 +224,3 @@ def analyze_window_size_reduction(cur: psycopg2.extensions.cursor, accelerator: 
     print(f"    Leaf node optimization: {leaf_nodes}/{total_nodes} nodes ({leaf_reduction:.1f}% skipped)")
     print(f"    Large subtree optimization: Max size {max_subtree} -> limited depth")
     print(f"    Average subtree size: {avg_subtree:.1f}")
-
-#Not sure if this works as intendd. Ergibt teils falsche ergebnisse. Ich verwende es deshabl erstmal nicht.
-def analyze_memory_io_benefits(cur: psycopg2.extensions.cursor) -> None:
-    """
-    Analysiert die Memory- und I/O-Vorteile der Optimierungen.
-    """
-    print("\n  Memory and I/O Benefits:")
-    
-    # Get basic table sizes
-    cur.execute("SELECT COUNT(*) FROM accel;")
-    standard_count = cur.fetchone()[0]
-    
-    cur.execute("SELECT COUNT(*) FROM optimized_accel;")
-    optimized_count = cur.fetchone()[0]
-    
-    print(f"    Standard accelerator: {standard_count} nodes")
-    print(f"    Optimized accelerator: {optimized_count} nodes")

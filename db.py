@@ -2,7 +2,7 @@
 """
 Datenbank-Utilities:
  - connect_db: Verbindung aufbauen
- - close_db:   Cursor und Connection schließen
+ - clear_db:    Datenbank leeren
  - setup_schema: Tabellen anlegen
 """
 
@@ -19,7 +19,7 @@ def connect_db():
 
 def clear_db() -> None:
     """
-    Löscht alle Tabellen, Sequences in der Datenbank.
+    Löscht alle Tabellen und Sequenzen in der Datenbank.
     """
     conn = connect_db()
     cur = conn.cursor()
@@ -47,8 +47,8 @@ def setup_schema(cur: psycopg2.extensions.cursor, use_original_schema: bool = Fa
     Legt die Tabellen für das XPath Accelerator System an.
 
     Args:
-        use_original_schema: If True, uses original Node/Edge schema for Phase 1 compatibility
-                           If False, uses new accel/content/attribute schema for window functions
+        use_original_schema: Wenn True, wird das originale Node/Edge-Schema für Phase 1 Kompatibilität verwendet.
+                            Wenn False, wird das neue accel/content/attribute-Schema für Window-Functions verwendet.
     """
     if use_original_schema:
         print("Richte Original Node/Edge Schema ein (Phase 1 Kompatibilität)...")

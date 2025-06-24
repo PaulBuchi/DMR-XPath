@@ -6,7 +6,6 @@ und Phase 2 (accel-Schema + SMALL_BIB + Demo-Queries).
 import os
 import re
 import sys
-from typing import Dict, List, Optional
 
 from db import (
     connect_db,
@@ -14,7 +13,12 @@ from db import (
     clear_db
 )
 from xml_parser import (
-    parse_toy_example
+    parse_toy_example,
+    extract_venue_publications,
+    validate_toy_example_inclusion,
+    count_nikolaus_augsten_publications,
+    find_toy_example_positions,
+    parse_extracted_data
 )
 from axes import (
     ancestor_nodes,
@@ -27,16 +31,7 @@ from model import (
 )
 from db import (
     get_database_statistics,
-    
-    )
-from xml_parser import (
-    extract_venue_publications,
-    validate_toy_example_inclusion,
-    count_nikolaus_augsten_publications,
-    find_toy_example_positions,
-    parse_extracted_data
 )
-
 from utils import test_xpath_accelerators_separately
 from config import TOY_XML, SMALL_BIB
 from single_axis_accelerator import verify_single_axis_correctness
@@ -47,8 +42,8 @@ from window_performance_analysis import analyze_window_performance
 
 def main_phase1() -> None:
     """
-    Phase 1: Toy Example Processing mit Original Node/Edge Schema.
-    Produziert die erwarteten Phase 1 Ergebnisse.
+    Phase 1: Verarbeitung des Toy-Beispiels mit dem Original Node/Edge-Schema.
+    Produziert die erwarteten Ergebnisse für Phase 1.
     """
     print("=== Phase 1: Toy Example Processing ===")
 
@@ -147,7 +142,7 @@ def main_phase1() -> None:
 
 def main_phase2(force_extraction: bool = False) -> None:
     """
-    Hauptprogramm für Phase 2: DBLP Data Processing und XPath Accelerator.
+    Hauptprogramm für Phase 2: DBLP-Datenverarbeitung und XPath-Beschleuniger.
     """
     print("=== Phase 2: DBLP Data Processing ===\n")
 
@@ -269,7 +264,7 @@ def main_phase2(force_extraction: bool = False) -> None:
 
 def main_phase3() -> None:
     """
-    Phase 3: Single-Axis XPath Accelerator Implementation und Window-Optimierungen.
+    Phase 3: Single-Axis XPath Accelerator Implementierung und Window-Optimierungen.
     Implementiert eine optimierte Variante mit nur einer Achse (descendants) und
     Window-Verkleinerungen für effizientere Anfragen.
     """
@@ -298,12 +293,37 @@ def main_phase3() -> None:
     print("\n" + "="*60)
     print("PHASE 3 COMPLETE - XPath Accelerator optimizations finished!")
     print("="*60)
+    print("Do you wish to create a bigger my_small_bib.xml file for further testing? (y/n): ", end="")
+    user_input = input().strip().lower()
+    if user_input in ['y', 'yes']:
+        output_file = "my_big_bib.xml"
+    if  os.path.exists(output_file):
+        print("1. Extracting venue-specific publications...")
+        venue_counts = extract_venue_publications("dblp.xml", output_file)
+    else:
+        print("1. Using existing my_small_bib.xml file...")
+        # Count publications in existing file
+        venue_counts = {'vldb': 0, 'sigmod': 0, 'icde': 0}
+        venue_patterns = {
+            'vldb': re.compile(r'key="(conf/vldb/|journals/pvldb/)'),
+            'sigmod': re.compile(r'key="(conf/sigmod/|journals/pacmmod/)'),
+            'icde': re.compile(r'key="(conf/icde/|journals/icde/)'),
+            'pacmmod': re.compile(r'key="(conf/pacmmod/|journals/pacmmod/)'),
+            'pvldb': re.compile(r'key="(conf/pvldb/|journals/pvldb/)'),
+        }
+        with open(output_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip().startswith('<article ') or line.strip().startswith('<inproceedings '):
+                    for venue, pattern in venue_patterns.items():
+                        if pattern.search(line):
+                            venue_counts[venue] += 1
+                            break
 
 
 def select_phase() -> int:
     """
-    Allows user to select which phase to run.
-    Returns 1 for Phase 1 (toy example), 2 for Phase 2 (DBLP processing), or 3 for Phase 3 (optimizations).
+    Ermöglicht dem Benutzer die Auswahl, welche Phase ausgeführt werden soll.
+    Gibt 1 für Phase 1 (Toy-Beispiel), 2 für Phase 2 (DBLP-Verarbeitung) oder 3 für Phase 3 (Optimierungen) zurück.
     """
 
     # Cleanup the DB

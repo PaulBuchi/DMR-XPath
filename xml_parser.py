@@ -1,7 +1,7 @@
 # xml_parser.py
 """
 XML-Parsing-Funktionen:
- - parse_toy_example: Liest dein Toy-XML ein und gruppiert Publikationen.
+ - parse_toy_example: Liest das Toy-XML ein und gruppiert Publikationen.
  - extract_venue_counts: Zählt SIGMOD/VLDB/ICDE-Tags per Regex.
 """
 
@@ -28,7 +28,7 @@ def parse_toy_example(
     file_path: str
 ) -> Dict[str, Dict[str, List[etree._Element]]]:
     """
-    Liest das Toy-Beispiel (XML) ein und gruppiert nach venue und Jahr.
+    Liest das Toy-Beispiel (XML) ein und gruppiert nach Venue und Jahr.
     Ignoriert dabei die Tags 'mdate' und 'orcid'.
     """
     parser = etree.XMLParser(
@@ -40,7 +40,7 @@ def parse_toy_example(
     venues: Dict[str, Dict[str, List[etree._Element]]] = defaultdict(
         lambda: defaultdict(list)
     )
-    root = tree.getroot()  # z.B. <dblp>
+    root = tree.getroot()
 
     bib = root.find("bib")
     if bib is None:

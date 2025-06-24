@@ -9,7 +9,7 @@ import psycopg2.extensions
 class Node:
     """
     Repräsentiert einen Knoten im XPath Accelerator EDGE Model mit beliebig vielen Kindern.
-    Implementiert post-order numbering für effiziente XPath-Abfragen.
+    Implementiert Post-Order-Nummerierung für effiziente XPath-Abfragen.
     Nach dem Einfügen in die DB speichert 'db_id' die generierte ID.
     """
 
@@ -50,21 +50,6 @@ class Node:
         # Post-Order: Nummeriere diesen Knoten nach den Kindern
         self.post_order = post_counter[0]
         post_counter[0] += 1
-
-    def calculate_post_order(self, counter: List[int]) -> int:
-        """
-        Berechnet die Post-Order-Nummerierung für diesen Knoten und alle Kinder.
-        Post-Order: Kinder werden vor dem Parent nummeriert.
-        (Backward compatibility method)
-        """
-        # Erst alle Kinder nummerieren
-        for child in self.children:
-            child.calculate_post_order(counter)
-
-        # Dann diesen Knoten nummerieren
-        self.post_order = counter[0]
-        counter[0] += 1
-        return self.post_order
 
     def insert_to_db(
         self,

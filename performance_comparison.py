@@ -1,8 +1,8 @@
 # performance_comparison.py
 """
-Performance comparison between different XPath Accelerator implementations:
-- Original EDGE Model (Phase 1)
-- Full XPath Accelerator (Phase 2) 
+Performance-Vergleich zwischen verschiedenen XPath Accelerator Implementierungen:
+- Originales EDGE-Modell (Phase 1)
+- Vollständiger XPath Accelerator (Phase 2) 
 - Single-Axis Accelerator (Phase 3)
 """
 import time
@@ -15,7 +15,7 @@ from axes import descendant_nodes, xpath_descendant_window
 
 def benchmark_descendant_queries() -> None:
     """
-    Benchmarks descendant queries across different implementations.
+    Führt Benchmarks für Descendant-Abfragen über verschiedene Implementierungen durch.
     """
     print("Performance Benchmark:")
     

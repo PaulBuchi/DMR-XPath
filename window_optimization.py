@@ -1,7 +1,7 @@
 # window_optimization.py
 """
 Optimierungen zur Verkleinerung des Fensters der pre- und post-order Achse.
-Implementiert erweiterte Window-Function Optimierungen für effizientere XPath-Abfragen.
+Implementiert erweiterte Window-Function-Optimierungen für effizientere XPath-Abfragen.
 """
 from typing import List, Optional, Tuple, Dict
 import psycopg2

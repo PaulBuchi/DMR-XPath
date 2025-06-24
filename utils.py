@@ -41,8 +41,8 @@ def print_nodes(
 
 def verify_traversal_orders(cur: psycopg2.extensions.cursor, publication_keys: List[str]) -> None:
     """
-    Verifies the pre-order and post-order traversal numbers for specific publications.
-    Displays the tree structure and traversal numbers for manual verification.
+    Überprüft die Pre-Order- und Post-Order-Traversierungsnummern für bestimmte Publikationen.
+    Zeigt die Baumstruktur und Traversierungsnummern zur manuellen Überprüfung an.
     """
     print("\n=== Traversal Order Verification ===")
 
