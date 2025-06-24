@@ -5,6 +5,7 @@ und Phase 2 (accel-Schema + SMALL_BIB + Demo-Queries).
 """
 import os
 import re
+import sys
 from typing import Dict, List, Optional
 
 from db import (
@@ -270,7 +271,6 @@ def select_phase() -> int:
     Allows user to select which phase to run.
     Returns 1 for Phase 1 (toy example) or 2 for Phase 2 (DBLP processing).
     """
-    import sys
 
     # Check for command line argument
     if len(sys.argv) > 1:
@@ -282,7 +282,6 @@ def select_phase() -> int:
             pass
 
     # Check environment variable
-    import os
     env_phase = os.environ.get('XPATH_PHASE')
     if env_phase:
         try:

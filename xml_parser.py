@@ -77,7 +77,7 @@ def resolve_entities(text: str) -> str:
 
     # Handle any remaining & that are not part of valid entities
     # This is a simple approach - replace standalone & with &amp;
-    import re
+    
     # Find & that are not followed by a valid entity pattern
     text = re.sub(r'&(?![a-zA-Z0-9#]+;)', '&amp;', text)
 

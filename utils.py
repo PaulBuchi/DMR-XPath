@@ -333,8 +333,7 @@ def generate_phase2_summary_tables(cur: psycopg2.extensions.cursor) -> None:
     print(f"  VLDB 2023: {vldb_id}")
 
     # Collect results for EDGE model (recursive functions)
-    print(f"\n1. EDGE MODEL RESULTS (Recursive Functions)")
-    print("-" * 50)
+    print(f"\nCOLLECTING EDGE MODEL RESULTS (Recursive Functions)")
 
     # Ancestor test
     ancestors_edge = ancestor_nodes(cur, "Daniel Ulrich Schmitt")
@@ -358,8 +357,8 @@ def generate_phase2_summary_tables(cur: psycopg2.extensions.cursor) -> None:
     schaler_preceding_ids_edge = [row[0] for row in schaler_preceding_edge]
 
     # Collect results for XPath Accelerator model (window functions)
-    print(f"\n2. XPATH ACCELERATOR MODEL RESULTS (Window Functions)")
-    print("-" * 50)
+    print(f"\n COLLECTING XPATH ACCELERATOR MODEL RESULTS (Window Functions)")
+
 
     # Ancestor test
     ancestors_xpath = xpath_ancestor_window(cur, daniel_id)
@@ -383,7 +382,7 @@ def generate_phase2_summary_tables(cur: psycopg2.extensions.cursor) -> None:
     schaler_preceding_ids_xpath = [row[0] for row in schaler_preceding_xpath]
 
     # Generate summary tables
-    print(f"\n3. EDGE MODEL SUMMARY TABLE")
+    print(f"\n1. EDGE MODEL SUMMARY TABLE")
     print("="*80)
     print("Axis                    | Result Node IDs                                    | Size")
     print("-" * 80)
@@ -402,7 +401,7 @@ def generate_phase2_summary_tables(cur: psycopg2.extensions.cursor) -> None:
     print(f"following SchalerHS23   | {schaler_following_str_edge:50} | {len(schaler_following_ids_edge)}")
     print(f"preceding SchalerHS23   | {schaler_preceding_str_edge:50} | {len(schaler_preceding_ids_edge)}")
 
-    print(f"\n4. XPATH ACCELERATOR MODEL SUMMARY TABLE")
+    print(f"\n2. XPATH ACCELERATOR MODEL SUMMARY TABLE")
     print("="*80)
     print("Axis                    | Result Node IDs                                    | Size")
     print("-" * 80)
@@ -422,7 +421,7 @@ def generate_phase2_summary_tables(cur: psycopg2.extensions.cursor) -> None:
     print(f"preceding SchalerHS23   | {schaler_preceding_str_xpath:50} | {len(schaler_preceding_ids_xpath)}")
 
     # Verification
-    print(f"\n5. VERIFICATION")
+    print(f"\n3. VERIFICATION")
     print("="*80)
     print("Comparing EDGE Model vs XPath Accelerator Model results:")
 
